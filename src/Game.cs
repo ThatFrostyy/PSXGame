@@ -8,6 +8,7 @@ namespace PSXGame;
 
 public class Game
 {
+    private const float BatteryLifeSeconds = 300f;
     private IWindow _window = null!;
     private GL _gl = null!;
     private IInputContext _input = null!;
@@ -19,6 +20,8 @@ public class Game
     private AmbientAudio _ambient = null!;
     private bool _firstMove = true;
     private Vector2D<float> _lastMousePos;
+    private float _batterySeconds = BatteryLifeSeconds;
+    private readonly Random _rng = new(42);
 
     public void Run()
     {
@@ -50,7 +53,10 @@ public class Game
         {
             if (key == Key.F)
             {
-                _camera.FlashlightOn = !_camera.FlashlightOn;
+                if (_batterySeconds > 0f)
+                {
+                    _camera.FlashlightOn = !_camera.FlashlightOn;
+                }
             }
         };
 
@@ -84,6 +90,21 @@ public class Game
         if (_keyboard.IsKeyPressed(Key.S)) _camera.MoveForward(-speed * dt);
         if (_keyboard.IsKeyPressed(Key.A)) _camera.MoveRight(-speed * dt);
         if (_keyboard.IsKeyPressed(Key.D)) _camera.MoveRight( speed * dt);
+
+        if (_camera.FlashlightOn)
+        {
+            _batterySeconds = MathF.Max(0f, _batterySeconds - dt);
+            if (_batterySeconds <= 0f)
+            {
+                _camera.FlashlightOn = false;
+            }
+        }
+
+        float batteryLevel = _batterySeconds / BatteryLifeSeconds;
+        bool shouldFlicker = _camera.FlashlightOn && batteryLevel < 0.2f;
+        bool flickerOff = shouldFlicker && _rng.NextSingle() < (0.12f + (0.2f - batteryLevel) * 1.8f);
+        _camera.FlashlightIntensity = flickerOff ? 0f : 1f;
+        _camera.BatteryLevel = batteryLevel;
     }
 
     private void OnResize(Vector2D<int> size)

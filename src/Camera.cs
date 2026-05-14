@@ -14,6 +14,8 @@ public class Camera
     public float Pitch = 0f;
     public float Fov = 73f; // Wider FOV for PSX feel
     public bool FlashlightOn = true;
+    public float FlashlightIntensity = 1f;
+    public float BatteryLevel = 1f;
 
     private static readonly Vector3D<float> WorldUp = new(0, 1, 0);
 

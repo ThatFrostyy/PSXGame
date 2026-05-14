@@ -7,25 +7,25 @@ public sealed class AmbientAudio : IDisposable
 {
     private readonly AL _al;
     private readonly ALContext _alc;
-    private readonly nint _device;
-    private readonly nint _context;
+    private readonly unsafe Device* _device;
+    private readonly unsafe Context* _context;
     private readonly uint _buffer;
     private readonly uint _source;
     private readonly bool _isInitialized;
 
-    public AmbientAudio()
+    public unsafe AmbientAudio()
     {
         _alc = ALContext.GetApi();
         _al = AL.GetApi();
         _device = _alc.OpenDevice(string.Empty);
-        if (_device == nint.Zero)
+        if (_device is null)
         {
             Console.Error.WriteLine("OpenAL initialization failed: unable to open audio device. Audio disabled.");
             return;
         }
 
         _context = _alc.CreateContext(_device, null);
-        if (_context == nint.Zero)
+        if (_context is null)
         {
             Console.Error.WriteLine("OpenAL initialization failed: unable to create audio context. Audio disabled.");
             _alc.CloseDevice(_device);
@@ -56,7 +56,7 @@ public sealed class AmbientAudio : IDisposable
         {
             fixed (short* p = pcm)
             {
-                _al.BufferData(_buffer, BufferFormat.Mono16, p, (uint)(pcm.Length * sizeof(short)), sampleRate);
+                _al.BufferData(_buffer, BufferFormat.Mono16, p, pcm.Length * sizeof(short), sampleRate);
             }
         }
 
@@ -66,7 +66,7 @@ public sealed class AmbientAudio : IDisposable
         _al.SourcePlay(_source);
     }
 
-    public void Dispose()
+    public unsafe void Dispose()
     {
         if (!_isInitialized)
         {

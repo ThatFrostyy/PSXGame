@@ -7,8 +7,8 @@ public sealed class AmbientAudio : IDisposable
 {
     private readonly AL _al;
     private readonly ALContext _alc;
-    private readonly unsafe Device* _device;
-    private readonly unsafe Context* _context;
+    private readonly nint _device;
+    private readonly nint _context;
     private readonly uint _buffer;
     private readonly uint _source;
     private readonly bool _isInitialized;
@@ -17,22 +17,23 @@ public sealed class AmbientAudio : IDisposable
     {
         _alc = ALContext.GetApi();
         _al = AL.GetApi();
-        _device = _alc.OpenDevice(string.Empty);
-        if (_device is null)
+
+        _device = (nint)_alc.OpenDevice(string.Empty);
+        if (_device == 0)
         {
             Console.Error.WriteLine("OpenAL initialization failed: unable to open audio device. Audio disabled.");
             return;
         }
 
-        _context = _alc.CreateContext(_device, null);
-        if (_context is null)
+        _context = (nint)_alc.CreateContext((Device*)_device, null);
+        if (_context == 0)
         {
             Console.Error.WriteLine("OpenAL initialization failed: unable to create audio context. Audio disabled.");
-            _alc.CloseDevice(_device);
+            _alc.CloseDevice((Device*)_device);
             return;
         }
 
-        _alc.MakeContextCurrent(_context);
+        _alc.MakeContextCurrent((Context*)_context);
 
         _buffer = _al.GenBuffer();
         _source = _al.GenSource();
@@ -52,12 +53,9 @@ public sealed class AmbientAudio : IDisposable
             pcm[i] = (short)(Math.Clamp(sample, -1f, 1f) * short.MaxValue);
         }
 
-        unsafe
+        fixed (short* p = pcm)
         {
-            fixed (short* p = pcm)
-            {
-                _al.BufferData(_buffer, BufferFormat.Mono16, p, pcm.Length * sizeof(short), sampleRate);
-            }
+            _al.BufferData(_buffer, BufferFormat.Mono16, p, pcm.Length * sizeof(short), sampleRate);
         }
 
         _al.SetSourceProperty(_source, SourceInteger.Buffer, (int)_buffer);
@@ -68,15 +66,12 @@ public sealed class AmbientAudio : IDisposable
 
     public unsafe void Dispose()
     {
-        if (!_isInitialized)
-        {
-            return;
-        }
+        if (!_isInitialized) return;
 
         _al.SourceStop(_source);
         _al.DeleteSource(_source);
         _al.DeleteBuffer(_buffer);
-        _alc.DestroyContext(_context);
-        _alc.CloseDevice(_device);
+        _alc.DestroyContext((Context*)_context);
+        _alc.CloseDevice((Device*)_device);
     }
 }

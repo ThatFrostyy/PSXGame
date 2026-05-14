@@ -93,6 +93,7 @@ public class Renderer : IDisposable
         _batteryShader.Use();
         _batteryShader.SetFloat("uBatteryLevel", cam.BatteryLevel);
         _batteryShader.SetInt("uBatteryTex", 0);
+        _batteryShader.SetFloat("uAspectRatio", aspect);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _batteryTexture);
         _gl.BindVertexArray(_hudVao);
@@ -197,8 +198,10 @@ public class Renderer : IDisposable
 "layout(location=0) in vec2 aPos;\n" +
 "layout(location=1) in vec2 aUV;\n" +
 "out vec2 vUV;\n" +
+"uniform float uAspectRatio;\n" +
 "void main(){\n" +
 "    vec2 scale = vec2(0.22, 0.08);\n" +
+"    scale.y *= uAspectRatio;\n" +
 "    vec2 offset = vec2(-0.74, -0.9);\n" +
 "    gl_Position = vec4(aPos * scale + offset, 0.0, 1.0);\n" +
 "    vUV = aUV;\n" +
@@ -219,6 +222,7 @@ public class Renderer : IDisposable
 "    if (inInner) {\n" +
 "        color = (vUV.x <= (0.08 + 0.84 * clamp(uBatteryLevel, 0.0, 1.0))) ? vec3(0.08, 0.95, 0.22) : vec3(0.0, 0.0, 0.0);\n" +
 "    }\n" +
+"    color = floor(color * 28.0) / 28.0;\n" +
 "    fragColor = vec4(color, alpha);\n" +
 "}\n";
 }

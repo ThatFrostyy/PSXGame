@@ -46,6 +46,13 @@ public class Game
         _keyboard = _input.Keyboards[0];
         _mouse    = _input.Mice[0];
         _mouse.Cursor.CursorMode = CursorMode.Raw;
+        _keyboard.KeyDown += (_, key, _) =>
+        {
+            if (key == Key.F)
+            {
+                _camera.FlashlightOn = !_camera.FlashlightOn;
+            }
+        };
 
         _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
         _scene    = new Scene(_gl);
@@ -77,7 +84,6 @@ public class Game
         if (_keyboard.IsKeyPressed(Key.S)) _camera.MoveForward(-speed * dt);
         if (_keyboard.IsKeyPressed(Key.A)) _camera.MoveRight(-speed * dt);
         if (_keyboard.IsKeyPressed(Key.D)) _camera.MoveRight( speed * dt);
-        if (_keyboard.IsKeyPressed(Key.F)) _camera.FlashlightOn = !_camera.FlashlightOn;
     }
 
     private void OnResize(Vector2D<int> size)

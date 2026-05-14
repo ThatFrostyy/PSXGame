@@ -86,7 +86,7 @@ public sealed class AmbientAudio : IDisposable
                 _ = reader.ReadInt32();
                 _ = reader.ReadUInt16();
                 bitsPerSample = reader.ReadUInt16();
-                if (chunkSize > 16) reader.ReadBytes(chunkSize - 16);
+                if (chunkSize > 16) reader.BaseStream.Seek(chunkSize - 16, SeekOrigin.Current);
                 if (audioFormat != 1) throw new InvalidDataException("Only PCM WAV is supported.");
             }
             else if (chunkId == "data")
@@ -95,8 +95,18 @@ public sealed class AmbientAudio : IDisposable
             }
             else
             {
-                reader.ReadBytes(chunkSize);
+                reader.BaseStream.Seek(chunkSize, SeekOrigin.Current);
             }
+
+            if ((chunkSize & 1) == 1)
+            {
+                reader.BaseStream.Seek(1, SeekOrigin.Current);
+            }
+        }
+
+        if (data.Length == 0)
+        {
+            throw new InvalidDataException("Invalid WAV (missing data chunk).");
         }
 
         BufferFormat format = (channels, bitsPerSample) switch

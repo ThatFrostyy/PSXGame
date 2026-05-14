@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using Silk.NET.OpenGL;
 using Silk.NET.Maths;
+using StbImageSharp;
 
 namespace PSXGame;
 
@@ -9,12 +11,47 @@ public class Renderer : IDisposable
     private readonly GL _gl;
     private Vector2D<int> _screenSize;
     private readonly ShaderProgram _planeShader;
+    private readonly ShaderProgram _batteryShader;
+    private readonly uint _batteryTexture;
+    private readonly uint _hudVao;
+    private readonly uint _hudVbo;
 
     public Renderer(GL gl, Vector2D<int> screenSize)
     {
         _gl = gl;
         _screenSize = screenSize;
         _planeShader = new ShaderProgram(gl, PlaneVert, PlaneFrag);
+        _batteryShader = new ShaderProgram(gl, HudVert, HudFrag);
+        _batteryTexture = LoadBatteryTexture();
+
+        _hudVao = _gl.GenVertexArray();
+        _hudVbo = _gl.GenBuffer();
+        float[] hudVerts =
+        [
+            -1f, -1f, 0f, 0f,
+             1f, -1f, 1f, 0f,
+             1f,  1f, 1f, 1f,
+            -1f, -1f, 0f, 0f,
+             1f,  1f, 1f, 1f,
+            -1f,  1f, 0f, 1f
+        ];
+        _gl.BindVertexArray(_hudVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _hudVbo);
+        unsafe
+        {
+            fixed (float* p = hudVerts)
+            {
+                _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(hudVerts.Length * sizeof(float)), p, BufferUsageARB.StaticDraw);
+            }
+        }
+        unsafe
+        {
+            _gl.EnableVertexAttribArray(0);
+            _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
+            _gl.EnableVertexAttribArray(1);
+            _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+        }
+        _gl.BindVertexArray(0);
     }
 
     public void Render(Scene scene, Camera cam)
@@ -45,10 +82,23 @@ public class Renderer : IDisposable
         _planeShader.SetVec3("uLightPos", lightPos);
         float flashlight = cam.FlashlightOn ? cam.FlashlightIntensity : 0f;
         _planeShader.SetFloat("uFlashlightOn", flashlight);
-        _planeShader.SetFloat("uBatteryLevel", cam.BatteryLevel);
         _planeShader.SetVector2("uResolution", new Vector2D<float>(_screenSize.X, _screenSize.Y));
         scene.PlaneMesh.Draw();
 
+        _gl.Disable(EnableCap.DepthTest);
+        _gl.Disable(EnableCap.CullFace);
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+
+        _batteryShader.Use();
+        _batteryShader.SetFloat("uBatteryLevel", cam.BatteryLevel);
+        _batteryShader.SetInt("uBatteryTex", 0);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _batteryTexture);
+        _gl.BindVertexArray(_hudVao);
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        _gl.BindVertexArray(0);
+        _gl.Disable(EnableCap.Blend);
         _gl.Enable(EnableCap.CullFace);
     }
 
@@ -59,7 +109,37 @@ public class Renderer : IDisposable
 
     public void Dispose()
     {
+        _gl.DeleteTexture(_batteryTexture);
+        _gl.DeleteBuffer(_hudVbo);
+        _gl.DeleteVertexArray(_hudVao);
+        _batteryShader.Dispose();
         _planeShader.Dispose();
+    }
+
+    private uint LoadBatteryTexture()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "battery.png");
+        if (!File.Exists(path))
+        {
+            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "battery.png");
+        }
+
+        using var fs = File.OpenRead(path);
+        var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
+        uint tex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, tex);
+        unsafe
+        {
+            fixed (byte* p = img.Data)
+            {
+                _gl.TexImage2D(TextureTarget.Texture2D, 0, (int)InternalFormat.Rgba8, (uint)img.Width, (uint)img.Height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, p);
+            }
+        }
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Nearest);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Nearest);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        return tex;
     }
 
     private const string PlaneVert =
@@ -95,7 +175,6 @@ public class Renderer : IDisposable
 "uniform vec3 uLightPos;\n" +
 "uniform vec3 uCamDir;\n" +
 "uniform float uFlashlightOn;\n" +
-"uniform float uBatteryLevel;\n" +
 "uniform vec2 uResolution;\n" +
 "void main() {\n" +
 "    vec2 g = abs(fract(vUV - 0.5) - 0.5) / fwidth(vUV);\n" +
@@ -109,27 +188,37 @@ public class Renderer : IDisposable
 "    float beam = pow(max(dot(toFrag, uCamDir), 0.0), 22.0) * uFlashlightOn;\n" +
 "    float dist = length(vWorldPos - uLightPos);\n" +
 "    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(16.0, 0.0, dist) * 2.0;\n" +
-"    vec2 uv = gl_FragCoord.xy / uResolution;\n" +
-"    vec2 minB = vec2(0.03, 0.035);\n" +
-"    vec2 maxB = vec2(0.24, 0.085);\n" +
-"    if (uv.x >= minB.x && uv.x <= maxB.x && uv.y >= minB.y && uv.y <= maxB.y) {\n" +
-"        float border = 0.002;\n" +
-"        bool inInner = uv.x >= minB.x + border && uv.x <= maxB.x - border && uv.y >= minB.y + border && uv.y <= maxB.y - border;\n" +
-"        vec3 frameCol = vec3(0.02, 0.03, 0.02);\n" +
-"        vec3 emptyCol = vec3(0.10, 0.02, 0.02);\n" +
-"        vec3 fullCol = vec3(0.08, 0.95, 0.22);\n" +
-"        if (!inInner) {\n" +
-"            col = mix(col, frameCol, 0.92);\n" +
-"        } else {\n" +
-"            float innerX = (uv.x - (minB.x + border)) / ((maxB.x - border) - (minB.x + border));\n" +
-"            vec3 fillCol = mix(emptyCol, fullCol, smoothstep(0.0, 1.0, uBatteryLevel));\n" +
-"            float grain = fract(sin(dot(floor(gl_FragCoord.xy), vec2(41.0, 289.0))) * 18017.13) * 0.08;\n" +
-"            vec3 bg = vec3(0.03, 0.04, 0.03);\n" +
-"            if (innerX <= uBatteryLevel) col = mix(col, fillCol + grain, 0.9);\n" +
-"            else col = mix(col, bg, 0.88);\n" +
-"        }\n" +
-"    }\n" +
 "    col = floor(col * 28.0) / 28.0;\n" +
 "    fragColor = vec4(col, 1.0);\n" +
+"}\n";
+
+    private const string HudVert =
+"#version 330 core\n" +
+"layout(location=0) in vec2 aPos;\n" +
+"layout(location=1) in vec2 aUV;\n" +
+"out vec2 vUV;\n" +
+"void main(){\n" +
+"    vec2 scale = vec2(0.22, 0.08);\n" +
+"    vec2 offset = vec2(-0.74, -0.9);\n" +
+"    gl_Position = vec4(aPos * scale + offset, 0.0, 1.0);\n" +
+"    vUV = aUV;\n" +
+"}\n";
+
+    private const string HudFrag =
+"#version 330 core\n" +
+"in vec2 vUV;\n" +
+"out vec4 fragColor;\n" +
+"uniform sampler2D uBatteryTex;\n" +
+"uniform float uBatteryLevel;\n" +
+"void main(){\n" +
+"    vec4 tex = texture(uBatteryTex, vUV);\n" +
+"    float alpha = tex.a;\n" +
+"    if (alpha < 0.05) discard;\n" +
+"    bool inInner = vUV.x > 0.08 && vUV.x < 0.92 && vUV.y > 0.2 && vUV.y < 0.8;\n" +
+"    vec3 color = tex.rgb;\n" +
+"    if (inInner) {\n" +
+"        color = (vUV.x <= (0.08 + 0.84 * clamp(uBatteryLevel, 0.0, 1.0))) ? vec3(0.08, 0.95, 0.22) : vec3(0.0, 0.0, 0.0);\n" +
+"    }\n" +
+"    fragColor = vec4(color, alpha);\n" +
 "}\n";
 }

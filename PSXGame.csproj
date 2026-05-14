@@ -20,4 +20,10 @@
     <PackageReference Include="Silk.NET.Input.Glfw" Version="2.21.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="src/sounds/crickets.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

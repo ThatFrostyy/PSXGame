@@ -1,0 +1,90 @@
+using System;
+using Silk.NET.Maths;
+using Silk.NET.OpenGL;
+using Silk.NET.Windowing;
+using Silk.NET.Input;
+
+namespace PSXGame;
+
+public class Game
+{
+    private IWindow _window = null!;
+    private GL _gl = null!;
+    private IInputContext _input = null!;
+    private Renderer _renderer = null!;
+    private Camera _camera = null!;
+    private Scene _scene = null!;
+    private IKeyboard _keyboard = null!;
+    private IMouse _mouse = null!;
+    private bool _firstMove = true;
+    private Vector2D<float> _lastMousePos;
+
+    public void Run()
+    {
+        var options = WindowOptions.Default with
+        {
+            Title = "Night Walk",
+            Size = new Vector2D<int>(960, 720),
+            API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core,
+                ContextFlags.Default, new APIVersion(3, 3)),
+            VSync = true,
+        };
+        _window = Window.Create(options);
+        _window.Load    += OnLoad;
+        _window.Update  += OnUpdate;
+        _window.Render  += OnRender;
+        _window.Closing += OnClose;
+        _window.Run();
+    }
+
+    private void OnLoad()
+    {
+        _gl    = _window.CreateOpenGL();
+        _input = _window.CreateInput();
+        _keyboard = _input.Keyboards[0];
+        _mouse    = _input.Mice[0];
+        _mouse.Cursor.CursorMode = CursorMode.Raw;
+
+        _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
+        _scene    = new Scene(_gl);
+        _renderer = new Renderer(_gl, _window.Size);
+
+        _gl.Enable(EnableCap.DepthTest);
+        Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
+    }
+
+    private void OnUpdate(double delta)
+    {
+        float dt = (float)delta;
+        if (_keyboard.IsKeyPressed(Key.Escape)) _window.Close();
+
+        var mp = new Vector2D<float>(_mouse.Position.X, _mouse.Position.Y);
+        if (_firstMove) { _lastMousePos = mp; _firstMove = false; }
+        float dx = mp.X - _lastMousePos.X;
+        float dy = mp.Y - _lastMousePos.Y;
+        _lastMousePos = mp;
+
+        _camera.Yaw   += dx * 0.12f;
+        _camera.Pitch -= dy * 0.12f;
+        _camera.Pitch  = Math.Clamp(_camera.Pitch, -89f, 89f);
+        _camera.UpdateVectors();
+
+        const float speed = 5f;
+        if (_keyboard.IsKeyPressed(Key.W)) _camera.MoveForward( speed * dt);
+        if (_keyboard.IsKeyPressed(Key.S)) _camera.MoveForward(-speed * dt);
+        if (_keyboard.IsKeyPressed(Key.A)) _camera.MoveRight(-speed * dt);
+        if (_keyboard.IsKeyPressed(Key.D)) _camera.MoveRight( speed * dt);
+    }
+
+    private void OnRender(double delta)
+    {
+        _renderer.Render(_scene, _camera);
+    }
+
+    private void OnClose()
+    {
+        _renderer.Dispose();
+        _scene.Dispose();
+        _input.Dispose();
+    }
+}

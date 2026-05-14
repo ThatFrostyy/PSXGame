@@ -193,36 +193,65 @@ public class Renderer : IDisposable
 "    fragColor = vec4(col, 1.0);\n" +
 "}\n";
 
-    private const string HudVert =
+private const string HudVert =
 "#version 330 core\n" +
 "layout(location=0) in vec2 aPos;\n" +
 "layout(location=1) in vec2 aUV;\n" +
 "out vec2 vUV;\n" +
 "uniform float uAspectRatio;\n" +
 "void main(){\n" +
-"    vec2 scale = vec2(0.22, 0.08);\n" +
-"    scale.y *= uAspectRatio;\n" +
-"    vec2 offset = vec2(-0.74, -0.9);\n" +
+"    vec2 scale = vec2(0.07, 0.07 * uAspectRatio);\n" +  // smaller
+"    vec2 offset = vec2(-0.82, -0.65);\n" +
 "    gl_Position = vec4(aPos * scale + offset, 0.0, 1.0);\n" +
 "    vUV = aUV;\n" +
 "}\n";
 
-    private const string HudFrag =
+private const string HudFrag =
 "#version 330 core\n" +
 "in vec2 vUV;\n" +
 "out vec4 fragColor;\n" +
 "uniform sampler2D uBatteryTex;\n" +
 "uniform float uBatteryLevel;\n" +
 "void main(){\n" +
-"    vec4 tex = texture(uBatteryTex, vUV);\n" +
-"    float alpha = tex.a;\n" +
-"    if (alpha < 0.05) discard;\n" +
-"    bool inInner = vUV.x > 0.08 && vUV.x < 0.92 && vUV.y > 0.2 && vUV.y < 0.8;\n" +
-"    vec3 color = tex.rgb;\n" +
-"    if (inInner) {\n" +
-"        color = (vUV.x <= (0.08 + 0.84 * clamp(uBatteryLevel, 0.0, 1.0))) ? vec3(0.08, 0.95, 0.22) : vec3(0.0, 0.0, 0.0);\n" +
+"    vec2 uv = vec2(vUV.x, 1.0 - vUV.y);\n" +
+"    vec4 tex = texture(uBatteryTex, uv);\n" +
+"    if (tex.a < 0.05) discard;\n" +
+"    float luma = dot(tex.rgb, vec3(0.299, 0.587, 0.114));\n" +
+"    if (luma >= 0.5) {\n" +
+"        fragColor = vec4(floor(tex.rgb * 28.0) / 28.0, tex.a);\n" +
+"        return;\n" +
 "    }\n" +
-"    color = floor(color * 28.0) / 28.0;\n" +
-"    fragColor = vec4(color, alpha);\n" +
+    // exact inner bounds measured from texture pixels
+    // left=79/300, right=232/300, top=53/398, bottom=367/398
+"    float l=0.263, r=0.773, b=0.133, t=0.922;\n" +
+"    if (uv.x < l || uv.x > r || uv.y < b || uv.y > t) {\n" +
+"        fragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
+"        return;\n" +
+"    }\n" +
+"    vec2 inner = vec2((uv.x - l)/(r - l), (uv.y - b)/(t - b));\n" +
+    // inner area is 153x314px, each cell is 153x(314/3)=153x104px
+"    float cellIndex = floor(inner.y * 3.0);\n" +
+"    float cellLocalY = fract(inner.y * 3.0);\n" +
+"    float cellLocalX = inner.x;\n" +
+"    float cellW = 153.0, cellH = 104.0;\n" +
+"    vec2 cellPx = vec2(cellLocalX * cellW, cellLocalY * cellH);\n" +
+"    float padPx = 8.0;\n" +
+"    float radiusPx = 10.0;\n" +
+"    vec2 innerSize = vec2(cellW - padPx*2.0, cellH - padPx*2.0);\n" +
+"    vec2 q = abs(cellPx - vec2(cellW, cellH)*0.5) - innerSize*0.5 + vec2(radiusPx);\n" +
+"    float sdf = length(max(q, 0.0)) - radiusPx;\n" +
+"    if (sdf > 0.0) {\n" +
+"        fragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
+"        return;\n" +
+"    }\n" +
+"    float cellFilled = (1.0 - clamp(uBatteryLevel, 0.0, 1.0)) * 3.0;\n" +
+"    bool lit = cellIndex >= floor(cellFilled);\n" +
+"    if (cellIndex == floor(cellFilled)) lit = cellLocalY >= fract(cellFilled);\n" +
+"    vec3 col;\n" +
+"    if (!lit)                      { col = vec3(0.0,  0.0,  0.0 ); }\n" +
+"    else if (uBatteryLevel > 0.66) { col = vec3(0.08, 0.95, 0.22); }\n" +
+"    else if (uBatteryLevel > 0.33) { col = vec3(0.95, 0.80, 0.08); }\n" +
+"    else                           { col = vec3(0.95, 0.15, 0.08); }\n" +
+"    fragColor = vec4(floor(col * 28.0) / 28.0, 1.0);\n" +
 "}\n";
 }

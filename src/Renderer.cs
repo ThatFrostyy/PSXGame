@@ -66,13 +66,16 @@ public class Renderer : IDisposable
 "layout(location=3) in vec3 aColor;\n" +
 "out vec3 vColor;\n" +
 "out vec2 vUV;\n" +
+"out vec3 vWorldPos;\n" +
 "uniform mat4 uModel;\n" +
 "uniform mat4 uView;\n" +
 "uniform mat4 uProjection;\n" +
 "void main() {\n" +
 "    vColor = aColor;\n" +
 "    vUV = aUV * 40.0;\n" +
-"    vec4 clip = uProjection * uView * uModel * vec4(aPos, 1.0);\n" +
+"    vec4 worldPos = uModel * vec4(aPos, 1.0);\n" +
+"    vWorldPos = worldPos.xyz;\n" +
+"    vec4 clip = uProjection * uView * worldPos;\n" +
 "    float snap = 240.0;\n" +
 "    clip.xy = floor(clip.xy * snap) / snap;\n" +
 "    gl_Position = clip;\n" +
@@ -82,6 +85,7 @@ public class Renderer : IDisposable
 "#version 330 core\n" +
 "in vec3 vColor;\n" +
 "in vec2 vUV;\n" +
+"in vec3 vWorldPos;\n" +
 "out vec4 fragColor;\n" +
 "uniform vec3 uCamPos;\n" +
 "uniform vec3 uCamDir;\n" +
@@ -95,10 +99,9 @@ public class Renderer : IDisposable
 "    vec2 d = gl_FragCoord.xy / uResolution;\n" +
 "    float bayer = fract(sin(dot(floor(d * 320.0), vec2(12.9898, 78.233))) * 43758.5453);\n" +
 "    col += (bayer - 0.5) / 90.0;\n" +
-"    vec3 worldPos = vec3(vUV.x / 40.0 * 80.0 - 40.0, 0.0, vUV.y / 40.0 * 80.0 - 40.0);\n" +
-"    vec3 toFrag = normalize(worldPos - uCamPos);\n" +
+"    vec3 toFrag = normalize(vWorldPos - uCamPos);\n" +
 "    float beam = pow(max(dot(toFrag, uCamDir), 0.0), 22.0) * uFlashlightOn;\n" +
-"    float dist = length(worldPos - uCamPos);\n" +
+"    float dist = length(vWorldPos - uCamPos);\n" +
 "    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(16.0, 0.0, dist) * 2.0;\n" +
 "    col = floor(col * 28.0) / 28.0;\n" +
 "    fragColor = vec4(col, 1.0);\n" +

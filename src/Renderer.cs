@@ -181,14 +181,17 @@ public class Renderer : IDisposable
 "    vec2 g = abs(fract(vUV - 0.5) - 0.5) / fwidth(vUV);\n" +
 "    float line = 1.0 - min(min(g.x, g.y), 1.0);\n" +
 "    vec3 col = vColor + line * 0.05;\n" +
-"    col *= vec3(0.60, 0.68, 0.82);\n" +
+"    col *= vec3(0.26, 0.30, 0.36);\n" +
 "    vec2 d = gl_FragCoord.xy / uResolution;\n" +
 "    float bayer = fract(sin(dot(floor(d * 320.0), vec2(12.9898, 78.233))) * 43758.5453);\n" +
 "    col += (bayer - 0.5) / 90.0;\n" +
 "    vec3 toFrag = normalize(vWorldPos - uLightPos);\n" +
 "    float beam = pow(max(dot(toFrag, uCamDir), 0.0), 22.0) * uFlashlightOn;\n" +
 "    float dist = length(vWorldPos - uLightPos);\n" +
-"    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(16.0, 0.0, dist) * 2.0;\n" +
+"    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(14.0, 0.0, dist) * 2.35;\n" +
+"    vec3 fogColor = vec3(0.015, 0.02, 0.03);\n" +
+"    float fog = smoothstep(7.5, 28.0, length(vWorldPos - uCamPos));\n" +
+"    col = mix(col, fogColor, fog);\n" +
 "    col = floor(col * 28.0) / 28.0;\n" +
 "    fragColor = vec4(col, 1.0);\n" +
 "}\n";
@@ -249,9 +252,9 @@ private const string HudFrag =
 "    if (cellIndex == floor(cellFilled)) lit = cellLocalY >= fract(cellFilled);\n" +
 "    vec3 col;\n" +
 "    if (!lit)                      { col = vec3(0.0,  0.0,  0.0 ); }\n" +
-"    else if (uBatteryLevel > 0.66) { col = vec3(0.08, 0.95, 0.22); }\n" +
-"    else if (uBatteryLevel > 0.33) { col = vec3(0.95, 0.80, 0.08); }\n" +
-"    else                           { col = vec3(0.95, 0.15, 0.08); }\n" +
+"    else if (uBatteryLevel > 0.66) { col = vec3(0.06, 0.82, 0.19); }\n" +
+"    else if (uBatteryLevel > 0.33) { col = vec3(0.83, 0.68, 0.07); }\n" +
+"    else                           { col = vec3(0.82, 0.12, 0.06); }\n" +
 "    fragColor = vec4(floor(col * 28.0) / 28.0, 1.0);\n" +
 "}\n";
 }

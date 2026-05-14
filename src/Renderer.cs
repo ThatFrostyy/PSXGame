@@ -7,7 +7,7 @@ namespace PSXGame;
 public class Renderer : IDisposable
 {
     private readonly GL _gl;
-    private readonly Vector2D<int> _screenSize;
+    private Vector2D<int> _screenSize;
     private readonly ShaderProgram _planeShader;
 
     public Renderer(GL gl, Vector2D<int> screenSize)
@@ -39,9 +39,18 @@ public class Renderer : IDisposable
         _planeShader.SetMatrix4("uView", view);
         _planeShader.SetMatrix4("uProjection", proj);
         _planeShader.SetMatrix4("uModel", Matrix4X4<float>.Identity);
+        _planeShader.SetVec3("uCamPos", cam.Position);
+        _planeShader.SetVec3("uCamDir", cam.Front);
+        _planeShader.SetFloat("uFlashlightOn", cam.FlashlightOn ? 1f : 0f);
+        _planeShader.SetVector2("uResolution", new Vector2D<float>(_screenSize.X, _screenSize.Y));
         scene.PlaneMesh.Draw();
 
         _gl.Enable(EnableCap.CullFace);
+    }
+
+    public void Resize(Vector2D<int> newSize)
+    {
+        _screenSize = newSize;
     }
 
     public void Dispose()
@@ -57,25 +66,44 @@ public class Renderer : IDisposable
 "layout(location=3) in vec3 aColor;\n" +
 "out vec3 vColor;\n" +
 "out vec2 vUV;\n" +
+"out vec3 vWorldPos;\n" +
 "uniform mat4 uModel;\n" +
 "uniform mat4 uView;\n" +
 "uniform mat4 uProjection;\n" +
 "void main() {\n" +
 "    vColor = aColor;\n" +
 "    vUV = aUV * 40.0;\n" +
-"    gl_Position = uProjection * uView * uModel * vec4(aPos, 1.0);\n" +
+"    vec4 worldPos = uModel * vec4(aPos, 1.0);\n" +
+"    vWorldPos = worldPos.xyz;\n" +
+"    vec4 clip = uProjection * uView * worldPos;\n" +
+"    float snap = 240.0;\n" +
+"    clip.xy = floor(clip.xy * snap) / snap;\n" +
+"    gl_Position = clip;\n" +
 "}\n";
 
     private const string PlaneFrag =
 "#version 330 core\n" +
 "in vec3 vColor;\n" +
 "in vec2 vUV;\n" +
+"in vec3 vWorldPos;\n" +
 "out vec4 fragColor;\n" +
+"uniform vec3 uCamPos;\n" +
+"uniform vec3 uCamDir;\n" +
+"uniform float uFlashlightOn;\n" +
+"uniform vec2 uResolution;\n" +
 "void main() {\n" +
 "    vec2 g = abs(fract(vUV - 0.5) - 0.5) / fwidth(vUV);\n" +
 "    float line = 1.0 - min(min(g.x, g.y), 1.0);\n" +
 "    vec3 col = vColor + line * 0.05;\n" +
 "    col *= vec3(0.60, 0.68, 0.82);\n" +
+"    vec2 d = gl_FragCoord.xy / uResolution;\n" +
+"    float bayer = fract(sin(dot(floor(d * 320.0), vec2(12.9898, 78.233))) * 43758.5453);\n" +
+"    col += (bayer - 0.5) / 90.0;\n" +
+"    vec3 toFrag = normalize(vWorldPos - uCamPos);\n" +
+"    float beam = pow(max(dot(toFrag, uCamDir), 0.0), 22.0) * uFlashlightOn;\n" +
+"    float dist = length(vWorldPos - uCamPos);\n" +
+"    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(16.0, 0.0, dist) * 2.0;\n" +
+"    col = floor(col * 28.0) / 28.0;\n" +
 "    fragColor = vec4(col, 1.0);\n" +
 "}\n";
 }

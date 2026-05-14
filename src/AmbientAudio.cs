@@ -74,32 +74,54 @@ public sealed class AmbientAudio : IDisposable
         ushort bitsPerSample = 0;
         byte[] data = Array.Empty<byte>();
 
-        while (reader.BaseStream.Position < reader.BaseStream.Length)
+        while (reader.BaseStream.Position + 8 <= reader.BaseStream.Length)
         {
             string chunkId = new(reader.ReadChars(4));
             int chunkSize = reader.ReadInt32();
+            if (chunkSize < 0)
+            {
+                throw new InvalidDataException($"Invalid WAV chunk size ({chunkSize}) in '{chunkId}'.");
+            }
+
+            long chunkDataStart = reader.BaseStream.Position;
+            long chunkDataEnd = chunkDataStart + chunkSize;
+            if (chunkDataEnd > reader.BaseStream.Length)
+            {
+                throw new InvalidDataException($"Invalid WAV chunk size ({chunkSize}) in '{chunkId}' exceeds stream length.");
+            }
+
             if (chunkId == "fmt ")
             {
+                if (chunkSize < 16)
+                {
+                    throw new InvalidDataException($"Invalid WAV fmt chunk size ({chunkSize}).");
+                }
+
                 ushort audioFormat = reader.ReadUInt16();
                 channels = reader.ReadUInt16();
                 sampleRate = reader.ReadInt32();
                 _ = reader.ReadInt32();
                 _ = reader.ReadUInt16();
                 bitsPerSample = reader.ReadUInt16();
-                if (chunkSize > 16) reader.BaseStream.Seek(chunkSize - 16, SeekOrigin.Current);
                 if (audioFormat != 1) throw new InvalidDataException("Only PCM WAV is supported.");
             }
             else if (chunkId == "data")
             {
                 data = reader.ReadBytes(chunkSize);
-            }
-            else
-            {
-                reader.BaseStream.Seek(chunkSize, SeekOrigin.Current);
+                if (data.Length != chunkSize)
+                {
+                    throw new InvalidDataException("Unexpected end of WAV data chunk.");
+                }
             }
 
+            reader.BaseStream.Seek(chunkDataEnd, SeekOrigin.Begin);
             if ((chunkSize & 1) == 1)
             {
+                if (reader.BaseStream.Position >= reader.BaseStream.Length)
+                {
+                    throw new InvalidDataException("Invalid WAV padding byte location.");
+                }
+
                 reader.BaseStream.Seek(1, SeekOrigin.Current);
             }
         }

@@ -16,6 +16,7 @@ public class Game
     private Scene _scene = null!;
     private IKeyboard _keyboard = null!;
     private IMouse _mouse = null!;
+    private AmbientAudio _ambient = null!;
     private bool _firstMove = true;
     private Vector2D<float> _lastMousePos;
 
@@ -33,6 +34,7 @@ public class Game
         _window.Load    += OnLoad;
         _window.Update  += OnUpdate;
         _window.Render  += OnRender;
+        _window.Resize += OnResize;
         _window.Closing += OnClose;
         _window.Run();
     }
@@ -48,6 +50,7 @@ public class Game
         _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
         _scene    = new Scene(_gl);
         _renderer = new Renderer(_gl, _window.Size);
+        _ambient = new AmbientAudio();
 
         _gl.Enable(EnableCap.DepthTest);
         Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
@@ -74,6 +77,12 @@ public class Game
         if (_keyboard.IsKeyPressed(Key.S)) _camera.MoveForward(-speed * dt);
         if (_keyboard.IsKeyPressed(Key.A)) _camera.MoveRight(-speed * dt);
         if (_keyboard.IsKeyPressed(Key.D)) _camera.MoveRight( speed * dt);
+        if (_keyboard.IsKeyPressed(Key.F)) _camera.FlashlightOn = !_camera.FlashlightOn;
+    }
+
+    private void OnResize(Vector2D<int> size)
+    {
+        _renderer.Resize(size);
     }
 
     private void OnRender(double delta)
@@ -85,6 +94,7 @@ public class Game
     {
         _renderer.Dispose();
         _scene.Dispose();
+        _ambient.Dispose();
         _input.Dispose();
     }
 }

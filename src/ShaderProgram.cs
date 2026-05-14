@@ -55,6 +55,12 @@ public class ShaderProgram : IDisposable
         if (loc >= 0) _gl.Uniform3(loc, v.X, v.Y, v.Z);
     }
 
+    public void SetVector2(string name, Vector2D<float> v)
+    {
+        int loc = _gl.GetUniformLocation(_handle, name);
+        if (loc >= 0) _gl.Uniform2(loc, v.X, v.Y);
+    }
+
     public void SetFloat(string name, float v)
     {
         int loc = _gl.GetUniformLocation(_handle, name);

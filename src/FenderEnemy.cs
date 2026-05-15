@@ -31,16 +31,16 @@ public sealed class FenderEnemy
     {
         var player2 = new Vector2D<float>(playerPos.X, playerPos.Z);
         Vector2D<float> toPlayer = player2 - Position;
-        float distToPlayer = toPlayer.Length;
+        float distSq = toPlayer.LengthSquared;
 
-        if (!IsChasing && distToPlayer < 1.35f)
+        if (!IsChasing && distSq < 1.35f * 1.35f)
             IsChasing = true;
 
-        IsSprinting = !IsChasing && distToPlayer < 14f;
+        IsSprinting = !IsChasing && distSq < 14f * 14f;
 
-        if (IsChasing && distToPlayer > 0.001f)
+        if (IsChasing && distSq > 0.001f * 0.001f)
         {
-            _moveDir = toPlayer / distToPlayer;
+            _moveDir = toPlayer / MathF.Sqrt(distSq);
         }
         else
         {

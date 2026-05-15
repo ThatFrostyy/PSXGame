@@ -270,10 +270,10 @@ public class Renderer : IDisposable
 
         // Fender enemy (single dynamic instance)
         _propShader.SetInt("uUseInstancing", 0);
+        _propShader.SetMatrix4("uModel", scene.Fender.Transform);
         foreach (var (mesh, tex) in scene.Fender.Model.Parts)
         {
             _gl.BindTexture(TextureTarget.Texture2D, tex != 0 ? tex : _whiteTex);
-            _propShader.SetMatrix4("uModel", scene.Fender.Transform);
             mesh.Draw();
         }
         _gl.Enable(EnableCap.CullFace);

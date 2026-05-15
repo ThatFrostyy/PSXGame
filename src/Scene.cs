@@ -114,7 +114,7 @@ public class Scene : IDisposable
         string bushTexDir = ResolveDir("src", "textures", "bushes");
         var bushModels = CacheModels(gl, bushFiles, bushTexDir);
 
-        const int bushCount = 60;
+        const int bushCount = 70;
         for (int i = 0; i < bushCount; i++)
         {
             float angle  = rng.NextSingle() * MathF.Tau;
@@ -124,9 +124,9 @@ public class Scene : IDisposable
             float scale  = 0.005f + rng.NextSingle() * 0.003f;
             float yaw    = rng.NextSingle() * MathF.Tau;
             var pos = new Vector2D<float>(x, z);
-            float treeBushDist = TreeCollisionRadius + BushCollisionRadius;
+            float treeBushDist = TreeCollisionRadius + BushCollisionRadius + 1;
             if (!IsFarFromTrees(pos, treeBushDist * treeBushDist)) continue;
-            if (!IsFarEnough(pos, _bushColliders, (BushCollisionRadius * 2f) * (BushCollisionRadius * 2f))) continue;
+            if (!IsFarEnough(pos, _bushColliders, (BushCollisionRadius * 2f) * (BushCollisionRadius * 2f) + 1)) continue;
 
             if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
@@ -139,20 +139,21 @@ public class Scene : IDisposable
     {
         if (treeModels.Count == 0) return;
 
+        float forestSpacing = 4f; // Big gaps between trees
+        float edgeSpacing   = 2.5f; // Tighter, but still separated
+
         // PASS 1: The "Actual Forest" (Covers the entire map)
         // We increase the count to ensure there are no empty fields.
-        SpawnTreeGroup(rng, treeModels, count: 450, minDist: 2.2f, samplePosition: () =>
-        {
-            // Random point anywhere on the map
-            float x = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 2f);
-            float z = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 2f);
-            return new Vector2D<float>(x, z);
+        SpawnTreeGroup(rng, treeModels, count: 400, minDist: forestSpacing, samplePosition: () =>
+            {
+                float x = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 2f);
+                float z = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 2f);
+                return new Vector2D<float>(x, z);
         });
 
         // PASS 2: The "Dense Edges" (Thick wall around the perimeter)
         // This pass only picks locations within the EdgeForestBand.
-        SpawnTreeGroup(rng, treeModels, count: 400, minDist: 1.5f, samplePosition: () =>
-        {
+        SpawnTreeGroup(rng, treeModels, count: 400, minDist: edgeSpacing, samplePosition: () =>        {
             float x, z;
             // Logic: Pick a side (Top, Bottom, Left, Right) to force the tree into the edge band
             int side = rng.Next(4);

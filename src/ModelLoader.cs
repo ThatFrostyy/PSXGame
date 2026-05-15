@@ -60,11 +60,14 @@ public static class ModelLoader
                     PostProcessSteps.FlipUVs |
                     PostProcessSteps.JoinIdenticalVertices));
 
-            if (scene == null || (scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
+            if (scene == null)
                 throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
 
             try
             {
+                if ((scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
+                    throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
+
                 ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
             }
             finally

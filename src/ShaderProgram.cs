@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Silk.NET.OpenGL;
 using Silk.NET.Maths;
 
@@ -8,6 +9,7 @@ public class ShaderProgram : IDisposable
 {
     private readonly GL _gl;
     private readonly uint _handle;
+    private readonly Dictionary<string, int> _uniformLocations = new();
 
     public ShaderProgram(GL gl, string vertSrc, string fragSrc)
     {
@@ -42,34 +44,44 @@ public class ShaderProgram : IDisposable
 
     public void Use() => _gl.UseProgram(_handle);
 
+    private int GetUniformLocationCached(string name)
+    {
+        if (_uniformLocations.TryGetValue(name, out int location))
+            return location;
+
+        location = _gl.GetUniformLocation(_handle, name);
+        _uniformLocations[name] = location;
+        return location;
+    }
+
     public void SetMatrix4(string name, Matrix4X4<float> mat)
     {
-        int loc = _gl.GetUniformLocation(_handle, name);
+        int loc = GetUniformLocationCached(name);
         if (loc < 0) return;
         unsafe { _gl.UniformMatrix4(loc, 1, false, (float*)&mat); }
     }
 
     public void SetVec3(string name, Vector3D<float> v)
     {
-        int loc = _gl.GetUniformLocation(_handle, name);
+        int loc = GetUniformLocationCached(name);
         if (loc >= 0) _gl.Uniform3(loc, v.X, v.Y, v.Z);
     }
 
     public void SetVector2(string name, Vector2D<float> v)
     {
-        int loc = _gl.GetUniformLocation(_handle, name);
+        int loc = GetUniformLocationCached(name);
         if (loc >= 0) _gl.Uniform2(loc, v.X, v.Y);
     }
 
     public void SetFloat(string name, float v)
     {
-        int loc = _gl.GetUniformLocation(_handle, name);
+        int loc = GetUniformLocationCached(name);
         if (loc >= 0) _gl.Uniform1(loc, v);
     }
 
     public void SetInt(string name, int v)
     {
-        int loc = _gl.GetUniformLocation(_handle, name);
+        int loc = GetUniformLocationCached(name);
         if (loc >= 0) _gl.Uniform1(loc, v);
     }
 

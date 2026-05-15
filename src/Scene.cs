@@ -83,7 +83,7 @@ public class Scene : IDisposable
         string bushTexDir = ResolveDir("src", "textures", "bushes");
         var bushModels = CacheModels(gl, bushFiles, bushTexDir);
 
-        const int bushCount = 26;
+        const int bushCount = 60;
         for (int i = 0; i < bushCount; i++)
         {
             float angle  = rng.NextSingle() * MathF.Tau;
@@ -103,34 +103,46 @@ public class Scene : IDisposable
     {
         if (treeModels.Count == 0) return;
 
-        // Thick tree belt near the map edges.
-        SpawnTreeGroup(rng, treeModels, count: 230, minDist: 2.3f, samplePosition: () =>
+        // PASS 1: The "Actual Forest" (Covers the entire map)
+        // We increase the count to ensure there are no empty fields.
+        SpawnTreeGroup(rng, treeModels, count: 450, minDist: 2.2f, samplePosition: () =>
         {
-            float x = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
-            float z = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
-            if (MathF.Abs(x) < MapHalfExtent - EdgeForestBand && MathF.Abs(z) < MapHalfExtent - EdgeForestBand)
+            // Random point anywhere on the map
+            float x = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 2f);
+            float z = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 2f);
+            return new Vector2D<float>(x, z);
+        });
+
+        // PASS 2: The "Dense Edges" (Thick wall around the perimeter)
+        // This pass only picks locations within the EdgeForestBand.
+        SpawnTreeGroup(rng, treeModels, count: 400, minDist: 1.5f, samplePosition: () =>
+        {
+            float x, z;
+            // Logic: Pick a side (Top, Bottom, Left, Right) to force the tree into the edge band
+            int side = rng.Next(4);
+            float margin = rng.NextSingle() * EdgeForestBand;
+
+            if (side == 0) // Left edge
             {
-                bool verticalBand = rng.NextSingle() < 0.5f;
-                if (verticalBand) x = MathF.CopySign(MapHalfExtent - rng.NextSingle() * EdgeForestBand, rng.NextSingle() < 0.5f ? -1f : 1f);
-                else z = MathF.CopySign(MapHalfExtent - rng.NextSingle() * EdgeForestBand, rng.NextSingle() < 0.5f ? -1f : 1f);
+                x = -MapHalfExtent + margin;
+                z = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
+            }
+            else if (side == 1) // Right edge
+            {
+                x = MapHalfExtent - margin;
+                z = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
+            }
+            else if (side == 2) // Top edge
+            {
+                x = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
+                z = -MapHalfExtent + margin;
+            }
+            else // Bottom edge
+            {
+                x = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
+                z = MapHalfExtent - margin;
             }
             return new Vector2D<float>(x, z);
-        });
-
-        // Lighter but map-wide forest coverage.
-        SpawnTreeGroup(rng, treeModels, count: 160, minDist: 3.0f, samplePosition: () =>
-        {
-            float x = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 4f);
-            float z = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 4f);
-            return new Vector2D<float>(x, z);
-        });
-
-        // Extra center trees (still less dense than edges).
-        SpawnTreeGroup(rng, treeModels, count: 80, minDist: 2.8f, samplePosition: () =>
-        {
-            float angle = rng.NextSingle() * MathF.Tau;
-            float radius = rng.NextSingle() * InnerForestRadius;
-            return new Vector2D<float>(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
         });
     }
 

@@ -6,6 +6,7 @@ uniform vec2 uScreenSize;
 uniform vec2 uPsxSize;
 uniform vec2 uCameraXZ;
 uniform float uMapHalfExtent;
+uniform float uEdgeForestBand;
 void main(){
     vec3 col=texture(uScene,vUV).rgb;
     float psxRow=floor(vUV.y*uPsxSize.y);
@@ -24,7 +25,7 @@ void main(){
     col=vec3(col.r*0.96, col.g*1.02, col.b*0.94);
 
     float edgeDist=max(abs(uCameraXZ.x), abs(uCameraXZ.y));
-    float edgeBand=26.0;
+    float edgeBand=uEdgeForestBand;
     float t=clamp((edgeDist-(uMapHalfExtent-edgeBand))/edgeBand,0.0,1.0);
     float noise=fract(sin(dot(vUV*uScreenSize+uCameraXZ*4.0,vec2(127.1,311.7)))*43758.5453);
     vec3 staticCol=mix(vec3(0.03,0.06,0.08), vec3(0.72,0.76,0.80), noise);

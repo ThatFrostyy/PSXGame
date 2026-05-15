@@ -17,7 +17,7 @@ public class Skybox : IDisposable
         _shader = new ShaderProgram(gl, Vert, Frag);
 
         // Large cube, no tricks - just a big box around the world
-        float s = 1f;
+        float s = 90f;
         float[] verts = {
             -s, s,-s,  -s,-s,-s,   s,-s,-s,   s,-s,-s,   s, s,-s,  -s, s,-s,
             -s,-s, s,  -s,-s,-s,  -s, s,-s,  -s, s,-s,  -s, s, s,  -s,-s, s,
@@ -57,7 +57,7 @@ public class Skybox : IDisposable
         // skybox renders behind everything that was already in the depth buffer,
         // but the depth buffer itself is not written (DepthMask false).
         _gl.Enable(EnableCap.DepthTest);
-        _gl.DepthFunc(DepthFunction.Always);
+        _gl.DepthFunc(DepthFunction.Lequal);
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
 
@@ -83,7 +83,7 @@ public class Skybox : IDisposable
         _shader.Dispose();
     }
 
-    private const string Vert =
+private const string Vert =
 "#version 330 core\n" +
 "layout(location=0) in vec3 aPos;\n" +
 "out vec3 vDir;\n" +
@@ -91,7 +91,8 @@ public class Skybox : IDisposable
 "uniform mat4 uProjection;\n" +
 "void main() {\n" +
 "    vDir = aPos;\n" +
-"    gl_Position = uProjection * uView * vec4(aPos, 1.0);\n" +
+"    vec4 clip = uProjection * uView * vec4(aPos, 1.0);\n" +
+"    gl_Position = clip.xyww;\n" +
 "}\n";
 
     private const string Frag =

@@ -79,9 +79,10 @@ public class Scene : IDisposable
             float radius = treeRingMin + rng.NextSingle() * (treeRingMax - treeRingMin);
             float x      = MathF.Cos(angle) * radius;
             float z      = MathF.Sin(angle) * radius;
-            float scale  = 0.9f + rng.NextSingle() * 0.6f;   // 0.9 – 1.5
+            float scale = 0.009f + rng.NextSingle() * 0.003f;  // try this first, adjust if still too big/small
             float yaw    = rng.NextSingle() * MathF.Tau;
 
+            if (treeModels.Count == 0) continue;
             var model = treeModels[rng.Next(treeModels.Count)];
             _props.Add(new PropInstance(model, MakeTRS(x, 0f, z, yaw, scale)));
         }
@@ -90,17 +91,18 @@ public class Scene : IDisposable
         var bushFiles = DiscoverModels(modelDir, "bush");
         var bushModels = CacheModels(gl, bushFiles, textureDir);
 
-        const int bushCount = 18;
+        const int bushCount = 10;
         for (int i = 0; i < bushCount; i++)
         {
             // Polar placement, avoid spawning right on top of the player (min r=3)
             float angle  = rng.NextSingle() * MathF.Tau;
-            float radius = 3f + rng.NextSingle() * 9f;
+            float radius = 6f + rng.NextSingle() * 14f;
             float x      = MathF.Cos(angle) * radius;
             float z      = MathF.Sin(angle) * radius;
-            float scale  = 0.5f + rng.NextSingle() * 0.5f;  // 0.5 – 1.0
+            float scale = 0.005f + rng.NextSingle() * 0.003f;
             float yaw    = rng.NextSingle() * MathF.Tau;
 
+            if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
             _props.Add(new PropInstance(model, MakeTRS(x, 0f, z, yaw, scale)));
         }
@@ -114,14 +116,17 @@ public class Scene : IDisposable
         var found = new List<string>();
         if (!System.IO.Directory.Exists(dir)) return found;
 
-        for (int n = 1; n <= 20; n++)          // support up to 20 variants
-        {
-            string path = System.IO.Path.Combine(dir, $"{prefix}{n}.fbx");
-            if (System.IO.File.Exists(path))
-                found.Add(path);
-            else if (n > 1)
-                break;  // stop as soon as the sequence ends
-        }
+        // Match any file starting with the prefix and ending in .fbx
+        var files = System.IO.Directory.GetFiles(dir, $"{prefix}*.fbx");
+        System.Array.Sort(files); // consistent ordering
+        found.AddRange(files);
+
+        if (found.Count == 0)
+            Console.Error.WriteLine($"[Scene] No models found for prefix '{prefix}' in {dir}");
+        else
+            foreach (var f in found)
+                Console.WriteLine($"[Scene] Discovered: {System.IO.Path.GetFileName(f)}");
+
         return found;
     }
 
@@ -161,12 +166,7 @@ public class Scene : IDisposable
     /// <summary>Resolve a path relative to the app base directory, with cwd fallback.</summary>
     private static string ResolveDir(params string[] parts)
     {
-        string path = System.IO.Path.Combine(
-            new string[] { AppContext.BaseDirectory }.Concat(parts) is var a
-                ? System.IO.Path.Combine(a.ToArray())
-                : "");
-        // simpler:
-        path = System.IO.Path.Combine(AppContext.BaseDirectory, System.IO.Path.Combine(parts));
+        string path = System.IO.Path.Combine(AppContext.BaseDirectory, System.IO.Path.Combine(parts));
         if (!System.IO.Directory.Exists(path))
             path = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(),
                                           System.IO.Path.Combine(parts));

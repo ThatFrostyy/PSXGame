@@ -8,43 +8,49 @@
     <Optimize>true</Optimize>
     <AssemblyName>PSXGame</AssemblyName>
     <RootNamespace>PSXGame</RootNamespace>
-
-    <!-- Single-file publish: dotnet publish -r win-x64 -c Release -->
+    <!--
+      Single-file publish: bundles all managed DLLs into the .exe.
+      The only files left alongside it will be the native .dll/.so files
+      (glfw3, openal32, etc.) that CANNOT be bundled as they are unmanaged.
+      Build with:  dotnet publish -r win-x64 -c Release
+      Swap win-x64 for linux-x64 / osx-x64 as needed.
+    -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
+    <!--
+      IL trimming: removes unused code from managed assemblies before
+      bundling, shrinking the final binary significantly.
+      Silk.NET 2.x ships trim-safe annotations so full trim is safe here.
+    -->
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>full</TrimMode>
+    <!-- Strip debug info from the release binary -->
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Silk.NET.OpenGL"         Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Windowing"      Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Input"          Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Maths"          Version="2.21.0" />
-    <PackageReference Include="Silk.NET.OpenAL"         Version="2.21.0" />
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Windowing" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Input" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Maths" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.OpenAL" Version="2.21.0" />
     <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Input.Glfw"     Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Assimp"         Version="2.21.0" />
-    <PackageReference Include="StbImageSharp"           Version="2.30.15" />
+    <PackageReference Include="Silk.NET.Input.Glfw" Version="2.21.0" />
+    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+    <PackageReference Include="Silk.NET.Assimp" Version="2.21.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="src/sounds/crickets.wav">
+    <None Update="src\models\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="src/sounds/flashlight.wav">
+    </None>
+    <None Update="src\textures\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <!-- Wildcard: picks up battery.png + all prop textures -->
-    <Content Include="src/textures/**">
+    </None>
+    <None Update="src\sounds\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <!-- Wildcard: picks up tree1.fbx, bush1.fbx, etc. -->
-    <Content Include="src/models/**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
   </ItemGroup>
 
 </Project>

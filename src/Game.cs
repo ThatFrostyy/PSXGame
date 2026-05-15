@@ -43,6 +43,8 @@ public class Game
     }
 
     private void OnLoad()
+{
+    try
     {
         _gl    = _window.CreateOpenGL();
         _input = _window.CreateInput();
@@ -64,19 +66,28 @@ public class Game
         _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
         _scene    = new Scene(_gl);
         _renderer = new Renderer(_gl, _window.Size);
+
         try
         {
             _ambient = new AmbientAudio();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"AmbientAudio failed to initialize: {ex.Message}. Continuing without audio.");
+            Console.Error.WriteLine($"AmbientAudio failed: {ex.Message}. Continuing without audio.");
             _ambient = null!;
         }
 
         _gl.Enable(EnableCap.DepthTest);
         Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
     }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine("=== FATAL ERROR IN OnLoad ===");
+        Console.Error.WriteLine(ex.ToString());
+        Console.Error.WriteLine("==============================");
+        _window.Close();
+    }
+}
 
     private void OnUpdate(double delta)
     {

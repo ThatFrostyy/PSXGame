@@ -126,6 +126,7 @@ public class Game
     {
         _renderer.Dispose();
         _scene.Dispose();
+        ModelLoader.ClearCache();
         _ambient?.Dispose();
         _input.Dispose();
     }

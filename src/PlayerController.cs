@@ -7,6 +7,9 @@ public sealed class PlayerController
 {
     private const float BatteryLifeSeconds = 300f;
     private const float MoveSpeed = 5f;
+    private const float MouseSensitivity = 0.12f;
+    private const float FootstepInterval = 0.47f;
+    private const float LowBatteryThreshold = 0.2f;
     private float _batterySeconds = BatteryLifeSeconds;
     private float _footstepTimer;
 
@@ -20,8 +23,12 @@ public sealed class PlayerController
         Action<Random>? playFootstep,
         Action<bool>? setFlashlightFlickerLoop)
     {
-        camera.Yaw += mouseDeltaX * 0.12f;
-        camera.Pitch -= mouseDeltaY * 0.12f;
+        ArgumentNullException.ThrowIfNull(camera);
+        ArgumentNullException.ThrowIfNull(keyboard);
+        ArgumentNullException.ThrowIfNull(rng);
+
+        camera.Yaw += mouseDeltaX * MouseSensitivity;
+        camera.Pitch -= mouseDeltaY * MouseSensitivity;
         camera.Pitch = Math.Clamp(camera.Pitch, -89f, 89f);
         camera.UpdateVectors();
 
@@ -44,7 +51,7 @@ public sealed class PlayerController
             if (_footstepTimer <= 0f)
             {
                 playFootstep?.Invoke(rng);
-                _footstepTimer = 0.47f;
+                _footstepTimer = FootstepInterval;
             }
         }
         else
@@ -62,15 +69,16 @@ public sealed class PlayerController
         }
 
         float batteryLevel = _batterySeconds / BatteryLifeSeconds;
-        bool shouldFlicker = camera.FlashlightOn && batteryLevel < 0.2f;
+        bool shouldFlicker = camera.FlashlightOn && batteryLevel < LowBatteryThreshold;
         setFlashlightFlickerLoop?.Invoke(shouldFlicker);
-        bool flickerOff = shouldFlicker && rng.NextSingle() < (0.12f + (0.2f - batteryLevel) * 1.8f);
+        bool flickerOff = shouldFlicker && rng.NextSingle() < (0.12f + (LowBatteryThreshold - batteryLevel) * 1.8f);
         camera.FlashlightIntensity = flickerOff ? 0f : 1f;
         camera.BatteryLevel = batteryLevel;
     }
 
     public bool TryToggleFlashlight(Camera camera)
     {
+        ArgumentNullException.ThrowIfNull(camera);
         if (_batterySeconds <= 0f)
         {
             return false;

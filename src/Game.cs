@@ -50,6 +50,10 @@ public class Game
             _keyboard = _input.Keyboards[0];
             _mouse    = _input.Mice[0];
             _mouse.Cursor.CursorMode = CursorMode.Raw;
+            _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
+            _scene    = new Scene(_gl);
+            _renderer = new Renderer(_gl, _window.Size);
+
             _keyboard.KeyDown += (_, key, _) =>
             {
                 if (key == Key.F)
@@ -60,10 +64,6 @@ public class Game
                     }
                 }
             };
-
-            _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
-            _scene    = new Scene(_gl);
-            _renderer = new Renderer(_gl, _window.Size);
 
             try
             {

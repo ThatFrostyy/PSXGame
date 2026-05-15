@@ -16,10 +16,9 @@ public class Scene : IDisposable
 {
     private const int MaxLoadedTreeVariants = 10;
     public const float MapHalfExtent = 75f;
-    private const float EdgeForestBand = 16f;
-    private const float InnerForestRadius = 18f;
-    private const float TreeCollisionRadius = 1.45f;
-    private const float BushCollisionRadius = 0.8f;
+    private const float EdgeForestBand = 20f;
+    private const float InnerForestRadius = 24f;
+    private const float TreeCollisionRadius = 1.0f;
 
     public Mesh PlaneMesh { get; private set; }
     public Skybox Skybox { get; private set; }
@@ -97,7 +96,6 @@ public class Scene : IDisposable
             if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
             AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
-            _treeColliders.Add((new Vector2D<float>(x, z), BushCollisionRadius));
         }
     }
 
@@ -105,8 +103,8 @@ public class Scene : IDisposable
     {
         if (treeModels.Count == 0) return;
 
-        // Dense tree belt near the map edges.
-        SpawnTreeGroup(rng, treeModels, count: 180, minDist: 2.5f, samplePosition: () =>
+        // Thick tree belt near the map edges.
+        SpawnTreeGroup(rng, treeModels, count: 230, minDist: 2.3f, samplePosition: () =>
         {
             float x = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
             float z = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
@@ -119,8 +117,16 @@ public class Scene : IDisposable
             return new Vector2D<float>(x, z);
         });
 
-        // Middle forest cluster.
-        SpawnTreeGroup(rng, treeModels, count: 70, minDist: 2.9f, samplePosition: () =>
+        // Lighter but map-wide forest coverage.
+        SpawnTreeGroup(rng, treeModels, count: 160, minDist: 3.0f, samplePosition: () =>
+        {
+            float x = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 4f);
+            float z = (rng.NextSingle() * 2f - 1f) * (MapHalfExtent - 4f);
+            return new Vector2D<float>(x, z);
+        });
+
+        // Extra center trees (still less dense than edges).
+        SpawnTreeGroup(rng, treeModels, count: 80, minDist: 2.8f, samplePosition: () =>
         {
             float angle = rng.NextSingle() * MathF.Tau;
             float radius = rng.NextSingle() * InnerForestRadius;

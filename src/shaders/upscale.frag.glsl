@@ -24,17 +24,19 @@ void main(){
     col=vec3(col.r*0.96, col.g*1.02, col.b*0.94);
 
     float edgeDist=max(abs(uCameraXZ.x), abs(uCameraXZ.y));
-    float edgeBand=18.0;
+    float edgeBand=26.0;
     float t=clamp((edgeDist-(uMapHalfExtent-edgeBand))/edgeBand,0.0,1.0);
     float noise=fract(sin(dot(vUV*uScreenSize+uCameraXZ*4.0,vec2(127.1,311.7)))*43758.5453);
-    vec3 staticCol=mix(vec3(0.04,0.08,0.10), vec3(0.65,0.70,0.74), noise);
+    vec3 staticCol=mix(vec3(0.03,0.06,0.08), vec3(0.72,0.76,0.80), noise);
     vec2 blurShift = vec2(1.0/uPsxSize.x, 1.0/uPsxSize.y) * (0.35 + t * 0.8);
     vec3 blurCol=texture(uScene,vUV+blurShift).rgb*0.25
                +texture(uScene,vUV-blurShift).rgb*0.25
                +texture(uScene,vUV+vec2(blurShift.x,-blurShift.y)).rgb*0.25
                +texture(uScene,vUV+vec2(-blurShift.x,blurShift.y)).rgb*0.25;
-    col=mix(col, blurCol, t*0.45);
-    col=mix(col, staticCol, t*0.28);
+    col=mix(col, blurCol, t*0.65);
+    col=mix(col, staticCol, t*0.55);
+    float blackout = smoothstep(0.65, 1.0, t);
+    col *= (1.0 - blackout);
 
     fragColor=vec4(clamp(col,0.0,1.0),1.0);
 }

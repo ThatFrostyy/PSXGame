@@ -21,6 +21,8 @@ public class Game
     private Vector2D<float> _lastMousePos;
     private readonly Random _rng = new(42);
     private readonly PlayerController _playerController = new();
+    private float _twigTimer;
+    private float _fenderFootstepTimer;
 
     public void Run()
     {
@@ -100,6 +102,8 @@ public class Game
         float dy = mp.Y - _lastMousePos.Y;
         _lastMousePos = mp;
 
+        _ambient?.SetListener(_camera.Position, _camera.Front, _camera.Up);
+
         _playerController.Update(
             _camera,
             _keyboard,
@@ -110,6 +114,26 @@ public class Game
             _rng,
             rng => _ambient?.PlayDirtFootstep(rng),
             enabled => _ambient?.SetFlashlightFlickerLoop(enabled));
+
+        _scene.Fender.Update(dt, _camera.Position, _rng);
+
+        _fenderFootstepTimer -= dt;
+        if (_fenderFootstepTimer <= 0f)
+        {
+            var f = _scene.Fender.Position;
+            _ambient?.PlayEnemyFootstep(_rng, new Vector3D<float>(f.X, 0f, f.Y));
+            _fenderFootstepTimer = _scene.Fender.FootstepInterval;
+        }
+
+        _twigTimer -= dt;
+        if (_twigTimer <= 0f)
+        {
+            float angle = _rng.NextSingle() * MathF.Tau;
+            float dist = 18f + (_rng.NextSingle() * 28f);
+            var twigPos = _camera.Position + new Vector3D<float>(MathF.Cos(angle) * dist, 0f, MathF.Sin(angle) * dist);
+            _ambient?.PlayTwigBreak(_rng, twigPos);
+            _twigTimer = 180f + (_rng.NextSingle() * 120f);
+        }
     }
 
     private void OnResize(Vector2D<int> size)

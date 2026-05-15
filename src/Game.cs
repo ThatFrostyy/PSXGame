@@ -8,7 +8,6 @@ namespace PSXGame;
 
 public class Game
 {
-    private const float BatteryLifeSeconds = 300f;
     private IWindow _window = null!;
     private GL _gl = null!;
     private IInputContext _input = null!;
@@ -20,9 +19,8 @@ public class Game
     private AmbientAudio _ambient = null!;
     private bool _firstMove = true;
     private Vector2D<float> _lastMousePos;
-    private float _batterySeconds = BatteryLifeSeconds;
     private readonly Random _rng = new(42);
-    private float _footstepTimer;
+    private readonly PlayerController _playerController = new();
 
     public void Run()
     {
@@ -44,51 +42,50 @@ public class Game
     }
 
     private void OnLoad()
-{
-    try
     {
-        _gl    = _window.CreateOpenGL();
-        _input = _window.CreateInput();
-        _keyboard = _input.Keyboards[0];
-        _mouse    = _input.Mice[0];
-        _mouse.Cursor.CursorMode = CursorMode.Raw;
-        _keyboard.KeyDown += (_, key, _) =>
-        {
-            if (key == Key.F)
-            {
-                if (_batterySeconds > 0f)
-                {
-                    _camera.FlashlightOn = !_camera.FlashlightOn;
-                    _ambient?.PlayFlashlightClick();
-                }
-            }
-        };
-
-        _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
-        _scene    = new Scene(_gl);
-        _renderer = new Renderer(_gl, _window.Size);
-
         try
         {
-            _ambient = new AmbientAudio();
+            _gl    = _window.CreateOpenGL();
+            _input = _window.CreateInput();
+            _keyboard = _input.Keyboards[0];
+            _mouse    = _input.Mice[0];
+            _mouse.Cursor.CursorMode = CursorMode.Raw;
+            _keyboard.KeyDown += (_, key, _) =>
+            {
+                if (key == Key.F)
+                {
+                    if (_playerController.TryToggleFlashlight(_camera))
+                    {
+                        _ambient?.PlayFlashlightClick();
+                    }
+                }
+            };
+
+            _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
+            _scene    = new Scene(_gl);
+            _renderer = new Renderer(_gl, _window.Size);
+
+            try
+            {
+                _ambient = new AmbientAudio();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"AmbientAudio failed: {ex.Message}. Continuing without audio.");
+                _ambient = null!;
+            }
+
+            _gl.Enable(EnableCap.DepthTest);
+            Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"AmbientAudio failed: {ex.Message}. Continuing without audio.");
-            _ambient = null!;
+            Console.Error.WriteLine("=== FATAL ERROR IN OnLoad ===");
+            Console.Error.WriteLine(ex.ToString());
+            Console.Error.WriteLine("==============================");
+            _window.Close();
         }
-
-        _gl.Enable(EnableCap.DepthTest);
-        Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
     }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine("=== FATAL ERROR IN OnLoad ===");
-        Console.Error.WriteLine(ex.ToString());
-        Console.Error.WriteLine("==============================");
-        _window.Close();
-    }
-}
 
     private void OnUpdate(double delta)
     {
@@ -101,54 +98,15 @@ public class Game
         float dy = mp.Y - _lastMousePos.Y;
         _lastMousePos = mp;
 
-        _camera.Yaw   += dx * 0.12f;
-        _camera.Pitch -= dy * 0.12f;
-        _camera.Pitch  = Math.Clamp(_camera.Pitch, -89f, 89f);
-        _camera.UpdateVectors();
-
-        const float speed = 5f;
-        float moveForward = 0f;
-        float moveRight = 0f;
-        if (_keyboard.IsKeyPressed(Key.W)) moveForward += 1f;
-        if (_keyboard.IsKeyPressed(Key.S)) moveForward -= 1f;
-        if (_keyboard.IsKeyPressed(Key.D)) moveRight += 1f;
-        if (_keyboard.IsKeyPressed(Key.A)) moveRight -= 1f;
-
-        if (moveForward != 0f || moveRight != 0f)
-        {
-            float invLen = 1f / MathF.Sqrt((moveForward * moveForward) + (moveRight * moveRight));
-            moveForward *= invLen;
-            moveRight *= invLen;
-            _camera.MoveForward(moveForward * speed * dt);
-            _camera.MoveRight(moveRight * speed * dt);
-
-            _footstepTimer -= dt;
-            if (_footstepTimer <= 0f)
-            {
-                _ambient?.PlayDirtFootstep(_rng);
-                _footstepTimer = 0.47f;
-            }
-        }
-        else
-        {
-            _footstepTimer = 0f;
-        }
-
-        if (_camera.FlashlightOn)
-        {
-            _batterySeconds = MathF.Max(0f, _batterySeconds - dt);
-            if (_batterySeconds <= 0f)
-            {
-                _camera.FlashlightOn = false;
-            }
-        }
-
-        float batteryLevel = _batterySeconds / BatteryLifeSeconds;
-        bool shouldFlicker = _camera.FlashlightOn && batteryLevel < 0.2f;
-        _ambient?.SetFlashlightFlickerLoop(shouldFlicker);
-        bool flickerOff = shouldFlicker && _rng.NextSingle() < (0.12f + (0.2f - batteryLevel) * 1.8f);
-        _camera.FlashlightIntensity = flickerOff ? 0f : 1f;
-        _camera.BatteryLevel = batteryLevel;
+        _playerController.Update(
+            _camera,
+            _keyboard,
+            dx,
+            dy,
+            dt,
+            _rng,
+            rng => _ambient?.PlayDirtFootstep(rng),
+            enabled => _ambient?.SetFlashlightFlickerLoop(enabled));
     }
 
     private void OnResize(Vector2D<int> size)

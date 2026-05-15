@@ -28,6 +28,7 @@ public class Renderer : IDisposable
 
     private readonly uint _batteryTexture;
     private readonly uint _groundTexture;
+    private readonly uint _wallTexture;
     private readonly uint _whiteTex;
 
     // Full-screen quad for upscale pass
@@ -54,6 +55,7 @@ public class Renderer : IDisposable
 
         _batteryTexture = LoadBatteryTexture();
         _groundTexture = LoadGroundTexture();
+        _wallTexture = LoadTextureFromPath(repeat: true, "tile", "Tile_11-128x128.png");
         _whiteTex       = MakeWhiteTexture();
 
         _planeShader.Use();
@@ -69,6 +71,7 @@ public class Renderer : IDisposable
         _upscaleShader.Use();
         _upscaleShader.SetInt("uScene", 0);
         _upscaleShader.SetFloat("uMapHalfExtent", Scene.MapHalfExtent);
+        _upscaleShader.SetFloat("uEdgeForestBand", Scene.EdgeForestBand);
 
         CreateFbo();
         CreateQuad(out _quadVao, out _quadVbo);
@@ -219,6 +222,13 @@ public class Renderer : IDisposable
         _propShader.SetVec3("uLightPos",  lightPos);
         _propShader.SetFloat("uFlashlightOn", flashlight);
         _propShader.SetVector2("uResolution", new Vector2D<float>(PsxW, PsxH));
+
+        // Perimeter walls (tile billboard, open top for skybox visibility)
+        _propShader.SetMatrix4("uModel", Matrix4X4<float>.Identity);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _wallTexture);
+        scene.WallMesh.Draw();
+
         _gl.ActiveTexture(TextureUnit.Texture0);
         foreach (var (model, transforms) in scene.PropsByModel)
         {
@@ -311,6 +321,7 @@ public class Renderer : IDisposable
         _gl.DeleteBuffer(_instanceVbo);
         _gl.DeleteTexture(_batteryTexture);
         _gl.DeleteTexture(_groundTexture);
+        _gl.DeleteTexture(_wallTexture);
         _gl.DeleteTexture(_whiteTex);
         _upscaleShader.Dispose();
         _batteryShader.Dispose();

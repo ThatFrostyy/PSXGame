@@ -16,11 +16,14 @@ public class Scene : IDisposable
 {
     private const int MaxLoadedTreeVariants = 10;
     public const float MapHalfExtent = 75f;
-    private const float EdgeForestBand = 20f;
+    public const float EdgeForestBand = 16f;
     private const float InnerForestRadius = 24f;
     private const float TreeCollisionRadius = 1.0f;
+    private const float BushCollisionRadius = 1.1f;
+    private const float WallHeight = 22f;
 
     public Mesh PlaneMesh { get; private set; }
+    public Mesh WallMesh { get; private set; }
     public Skybox Skybox { get; private set; }
 
     /// <summary>Placed tree and bush instances grouped by model, ready for instanced rendering.</summary>
@@ -28,12 +31,40 @@ public class Scene : IDisposable
     private readonly Dictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> _propsByModel = new();
     public IReadOnlyList<(Vector2D<float> Position, float Radius)> TreeColliders => _treeColliders;
     private readonly List<(Vector2D<float> Position, float Radius)> _treeColliders = new();
+    private readonly List<(Vector2D<float> Position, float Radius)> _bushColliders = new();
 
     public Scene(GL gl)
     {
         PlaneMesh = BuildPlane(gl);
+        WallMesh = BuildWalls(gl);
         Skybox = new Skybox(gl);
         SpawnProps(gl);
+    }
+
+    private static Mesh BuildWalls(GL gl)
+    {
+        float s = MapHalfExtent - 0.5f;
+        float h = WallHeight;
+        float tileU = 10f;
+        float tileV = 2f;
+        var verts = new List<float>();
+        void V(float x, float y, float z, float nx, float nz, float u, float v)
+        {
+            verts.Add(x); verts.Add(y); verts.Add(z);
+            verts.Add(nx); verts.Add(0); verts.Add(nz);
+            verts.Add(u); verts.Add(v);
+            verts.Add(0.16f); verts.Add(0.16f); verts.Add(0.16f);
+        }
+        void Quad((float x, float z) a, (float x, float z) b, float nx, float nz)
+        {
+            V(a.x, 0, a.z, nx, nz, 0, 0); V(b.x, 0, b.z, nx, nz, tileU, 0); V(b.x, h, b.z, nx, nz, tileU, tileV);
+            V(a.x, 0, a.z, nx, nz, 0, 0); V(b.x, h, b.z, nx, nz, tileU, tileV); V(a.x, h, a.z, nx, nz, 0, tileV);
+        }
+        Quad((-s, -s), (s, -s), 0, 1);   // north, facing inward
+        Quad((s, -s), (s, s), -1, 0);    // east
+        Quad((s, s), (-s, s), 0, -1);    // south
+        Quad((-s, s), (-s, -s), 1, 0);   // west
+        return new Mesh(gl, verts.ToArray());
     }
 
     // -------------------------------------------------------------------------
@@ -92,10 +123,14 @@ public class Scene : IDisposable
             float z      = MathF.Sin(angle) * radius;
             float scale  = 0.005f + rng.NextSingle() * 0.003f;
             float yaw    = rng.NextSingle() * MathF.Tau;
+            var pos = new Vector2D<float>(x, z);
+            if (!IsFarFromTrees(pos, BushCollisionRadius * BushCollisionRadius)) continue;
+            if (!IsFarEnough(pos, _bushColliders, (BushCollisionRadius * 2f) * (BushCollisionRadius * 2f))) continue;
 
             if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
             AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
+            _bushColliders.Add((pos, BushCollisionRadius));
         }
     }
 
@@ -155,7 +190,7 @@ public class Scene : IDisposable
         {
             attempts++;
             var pos = samplePosition();
-            if (!IsFarEnough(pos, minDistSq))
+            if (!IsFarFromTrees(pos, minDistSq))
                 continue;
 
             float scale = 0.009f + rng.NextSingle() * 0.003f;
@@ -167,11 +202,15 @@ public class Scene : IDisposable
         }
     }
 
-    private bool IsFarEnough(Vector2D<float> candidate, float minDistSq)
+    private bool IsFarFromTrees(Vector2D<float> candidate, float minDistSq)
     {
         if (candidate.LengthSquared < 9f) return false; // 3m safe zone around start
+        return IsFarEnough(candidate, _treeColliders, minDistSq);
+    }
 
-        foreach (var collider in _treeColliders)
+    private static bool IsFarEnough(Vector2D<float> candidate, List<(Vector2D<float> Position, float Radius)> colliders, float minDistSq)
+    {
+        foreach (var collider in colliders)
         {
             Vector2D<float> delta = candidate - collider.Position;
             if (delta.LengthSquared < minDistSq) return false;
@@ -275,6 +314,7 @@ public class Scene : IDisposable
     public void Dispose()
     {
         PlaneMesh.Dispose();
+        WallMesh.Dispose();
         Skybox.Dispose();
 
     }

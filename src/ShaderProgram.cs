@@ -44,8 +44,9 @@ public class ShaderProgram : IDisposable
 
     public void Use() => _gl.UseProgram(_handle);
 
-    private int GetUniformLocationCached(string name)
+    public int GetUniformLocationCached(string name)
     {
+        if (string.IsNullOrEmpty(name)) return -1;
         if (_uniformLocations.TryGetValue(name, out int location))
             return location;
 

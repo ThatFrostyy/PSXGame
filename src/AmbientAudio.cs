@@ -10,8 +10,10 @@ public sealed class AmbientAudio : IDisposable
     private readonly ALContext _alc;
     private readonly nint _device;
     private readonly nint _context;
-    private readonly uint _buffer;
-    private readonly uint _source;
+    private readonly uint _ambientBuffer;
+    private readonly uint _ambientSource;
+    private readonly uint _flashlightBuffer;
+    private readonly uint _flashlightSource;
     private readonly bool _isInitialized;
 
     public unsafe AmbientAudio()
@@ -36,26 +38,53 @@ public sealed class AmbientAudio : IDisposable
 
         _alc.MakeContextCurrent((Context*)_context);
 
-        _buffer = _al.GenBuffer();
-        _source = _al.GenSource();
+        _ambientBuffer = _al.GenBuffer();
+        _ambientSource = _al.GenSource();
+        _flashlightBuffer = _al.GenBuffer();
+        _flashlightSource = _al.GenSource();
         _isInitialized = true;
 
-        string wavPath = Path.Combine(AppContext.BaseDirectory, "src", "sounds", "crickets.wav");
-        if (!File.Exists(wavPath))
+        var ambientWav = LoadWav(ResolveSoundPath("crickets.wav"));
+        fixed (byte* p = ambientWav.Data)
         {
-            wavPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "sounds", "crickets.wav");
+            _al.BufferData(_ambientBuffer, ambientWav.Format, p, ambientWav.Data.Length, ambientWav.SampleRate);
         }
 
-        var wav = LoadWav(wavPath);
-        fixed (byte* p = wav.Data)
+        _al.SetSourceProperty(_ambientSource, SourceInteger.Buffer, (int)_ambientBuffer);
+        _al.SetSourceProperty(_ambientSource, SourceBoolean.Looping, true);
+        _al.SetSourceProperty(_ambientSource, SourceFloat.Gain, 0.35f);
+        _al.SourcePlay(_ambientSource);
+
+        var flashlightWav = LoadWav(ResolveSoundPath("flashlight.wav"));
+        fixed (byte* p = flashlightWav.Data)
         {
-            _al.BufferData(_buffer, wav.Format, p, wav.Data.Length, wav.SampleRate);
+            _al.BufferData(_flashlightBuffer, flashlightWav.Format, p, flashlightWav.Data.Length, flashlightWav.SampleRate);
         }
 
-        _al.SetSourceProperty(_source, SourceInteger.Buffer, (int)_buffer);
-        _al.SetSourceProperty(_source, SourceBoolean.Looping, true);
-        _al.SetSourceProperty(_source, SourceFloat.Gain, 0.35f);
-        _al.SourcePlay(_source);
+        _al.SetSourceProperty(_flashlightSource, SourceInteger.Buffer, (int)_flashlightBuffer);
+        _al.SetSourceProperty(_flashlightSource, SourceBoolean.Looping, false);
+        _al.SetSourceProperty(_flashlightSource, SourceFloat.Gain, 0.85f);
+    }
+
+
+    public void PlayFlashlightClick()
+    {
+        if (!_isInitialized) return;
+
+        _al.SourceStop(_flashlightSource);
+        _al.SetSourceProperty(_flashlightSource, SourceFloat.SecOffset, 0f);
+        _al.SourcePlay(_flashlightSource);
+    }
+
+    private static string ResolveSoundPath(string fileName)
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "src", "sounds", fileName);
+        if (!File.Exists(path))
+        {
+            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "sounds", fileName);
+        }
+
+        return path;
     }
 
     private static (BufferFormat Format, int SampleRate, byte[] Data) LoadWav(string path)
@@ -146,9 +175,12 @@ public sealed class AmbientAudio : IDisposable
     {
         if (!_isInitialized) return;
 
-        _al.SourceStop(_source);
-        _al.DeleteSource(_source);
-        _al.DeleteBuffer(_buffer);
+        _al.SourceStop(_ambientSource);
+        _al.SourceStop(_flashlightSource);
+        _al.DeleteSource(_ambientSource);
+        _al.DeleteSource(_flashlightSource);
+        _al.DeleteBuffer(_ambientBuffer);
+        _al.DeleteBuffer(_flashlightBuffer);
         _alc.DestroyContext((Context*)_context);
         _alc.CloseDevice((Device*)_device);
     }

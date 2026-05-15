@@ -56,6 +56,7 @@ public class Game
                 if (_batterySeconds > 0f)
                 {
                     _camera.FlashlightOn = !_camera.FlashlightOn;
+                    _ambient.PlayFlashlightClick();
                 }
             }
         };

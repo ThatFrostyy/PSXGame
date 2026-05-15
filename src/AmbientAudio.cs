@@ -19,6 +19,7 @@ public sealed class AmbientAudio : IDisposable
     private readonly uint[] _dirtFootstepBuffers = new uint[5];
     private readonly uint _footstepSource;
     private readonly bool _isInitialized;
+    private bool _isFlickerPlaying;
 
     public unsafe AmbientAudio()
     {
@@ -144,19 +145,23 @@ public sealed class AmbientAudio : IDisposable
     public void SetFlashlightFlickerLoop(bool enabled)
     {
         if (!_isInitialized) return;
-        _al.GetSourceProperty(_flickerSource, GetSourceInteger.SourceState, out int state);
-        bool playing = (SourceState)state == SourceState.Playing;
-
-        if (enabled && !playing)
+        if (enabled && !_isFlickerPlaying)
+        {
             _al.SourcePlay(_flickerSource);
-        else if (!enabled && playing)
+            _isFlickerPlaying = true;
+        }
+        else if (!enabled && _isFlickerPlaying)
+        {
             _al.SourceStop(_flickerSource);
+            _isFlickerPlaying = false;
+        }
     }
 
     public void PlayDirtFootstep(Random rng)
     {
         if (!_isInitialized || _dirtFootstepBuffers.Length == 0) return;
         uint selectedBuffer = _dirtFootstepBuffers[rng.Next(_dirtFootstepBuffers.Length)];
+        _al.SourceStop(_footstepSource);
         _al.SetSourceProperty(_footstepSource, SourceInteger.Buffer, (int)selectedBuffer);
         _al.SourcePlay(_footstepSource);
     }

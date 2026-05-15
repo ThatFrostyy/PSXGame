@@ -25,7 +25,7 @@ public static class ModelLoader
     private static readonly Assimp _assimp = Assimp.GetApi();
     private static readonly object _assimpLock = new();
     private static readonly ConcurrentDictionary<string, Lazy<LoadedModel>> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
-    private static int? _glThreadId;
+    private static int _glThreadId = -1;
 
     // Updated record to include the GL context for cleanup
     public record LoadedModel(GL Gl, List<(Mesh Mesh, uint Texture)> Parts) : IDisposable
@@ -70,6 +70,7 @@ public static class ModelLoader
 
     public static void ClearCache()
     {
+        EnsureOpenGlThread();
         foreach (var lazy in _loadedModelCache.Values)
         {
             if (lazy.IsValueCreated)
@@ -113,11 +114,11 @@ public static class ModelLoader
     private static void EnsureOpenGlThread()
     {
         int currentThread = Environment.CurrentManagedThreadId;
-        int? expectedThread = _glThreadId;
+        int expectedThread = _glThreadId;
 
-        if (expectedThread is null)
+        if (expectedThread == -1)
         {
-            Interlocked.CompareExchange(ref _glThreadId, currentThread, null);
+            Interlocked.CompareExchange(ref _glThreadId, currentThread, -1);
             expectedThread = _glThreadId;
         }
 

@@ -290,9 +290,9 @@ public class Renderer : IDisposable
 
     private uint LoadGroundTexture()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "grass", "Grass_02-128x128.png");
+        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "grass", "grass01.png");
         if (!File.Exists(path))
-            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "grass", "Grass_02-128x128.png");
+            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "grass", "grass01.png");
         using var fs = File.OpenRead(path);
         var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
         return UploadTexture((uint)img.Width, (uint)img.Height, img.Data, repeat: true);

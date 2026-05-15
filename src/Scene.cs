@@ -206,8 +206,5 @@ public class Scene : IDisposable
         PlaneMesh.Dispose();
         Skybox.Dispose();
 
-        // Models are centrally owned/cached by ModelLoader.
-        ModelLoader.ClearCache();
-
     }
 }

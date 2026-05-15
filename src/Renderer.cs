@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Silk.NET.OpenGL;
 using Silk.NET.Maths;
@@ -37,6 +38,7 @@ public class Renderer : IDisposable
     private readonly uint _hudVao;
     private readonly uint _hudVbo;
     private readonly uint _instanceVbo;
+    private readonly HashSet<Mesh> _configuredInstanceMeshes = new();
 
     private const int InstancingFallbackThreshold = 2;
 
@@ -169,6 +171,9 @@ public class Renderer : IDisposable
     // -------------------------------------------------------------------------
     public void Render(Scene scene, Camera cam)
     {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(cam);
+
         // ---- PASS 1: render scene into PSX-res FBO ---------------------------
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _fbo);
         _gl.Viewport(0, 0, PsxW, PsxH);
@@ -230,7 +235,10 @@ public class Renderer : IDisposable
                 _gl.BindTexture(TextureTarget.Texture2D, tex != 0 ? tex : _whiteTex);
                 if (useInstancing)
                 {
-                    mesh.ConfigureInstanceMatrixAttributes(_instanceVbo);
+                    if (_configuredInstanceMeshes.Add(mesh))
+                    {
+                        mesh.ConfigureInstanceMatrixAttributes(_instanceVbo);
+                    }
                     mesh.DrawInstanced((uint)transforms.Count);
                 }
                 else

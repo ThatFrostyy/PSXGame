@@ -14,6 +14,8 @@ public readonly record struct PropInstance(
 
 public class Scene : IDisposable
 {
+    private const int MaxLoadedTreeVariants = 10;
+
     public Mesh PlaneMesh { get; private set; }
     public Skybox Skybox { get; private set; }
 
@@ -66,9 +68,10 @@ public class Scene : IDisposable
 
         // --- Trees ---
         var treeFiles = DiscoverModels(modelDir, "tree");
+        var selectedTreeFiles = ChooseRandomSubset(treeFiles, MaxLoadedTreeVariants, rng);
         // Resolve the specific subdirectory for tree textures
         string treeTexDir = ResolveDir("src", "textures", "trees"); 
-        var treeModels = CacheModels(gl, treeFiles, treeTexDir);
+        var treeModels = CacheModels(gl, selectedTreeFiles, treeTexDir);
 
         const int treeCount = 30;
         const float treeRingMin = 28f;
@@ -142,6 +145,23 @@ public class Scene : IDisposable
     }
 
     /// <summary>
+    /// Selects up to <paramref name="maxCount"/> random unique file paths.
+    /// </summary>
+    private static List<string> ChooseRandomSubset(List<string> source, int maxCount, Random rng)
+    {
+        if (source.Count <= maxCount) return source;
+
+        var shuffled = new List<string>(source);
+        for (int i = shuffled.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
+        }
+
+        return shuffled.GetRange(0, maxCount);
+    }
+
+    /// <summary>
     /// Loads each model file once and returns the list. Duplicate paths reuse the same instance.
     /// </summary>
     private static List<ModelLoader.LoadedModel> CacheModels(
@@ -190,13 +210,8 @@ public class Scene : IDisposable
         PlaneMesh.Dispose();
         Skybox.Dispose();
 
-        // Dispose each unique model once (multiple PropInstances may share the same model)
-        var disposed = new HashSet<ModelLoader.LoadedModel>();
-        foreach (var model in _propsByModel.Keys)
-        {
-            if (disposed.Add(model))
-                model.Dispose();
-        }
+        // Models are centrally owned/cached by ModelLoader.
+        ModelLoader.ClearCache();
 
         foreach (var tex in _ownedTextures)
             ; // textures are owned by LoadedModel, nothing extra here

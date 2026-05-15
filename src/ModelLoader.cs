@@ -52,25 +52,29 @@ public static class ModelLoader
         string modelBaseName = Path.GetFileNameWithoutExtension(fbxPath);
         var parts = new List<(Mesh, uint)>();
 
+        Silk.NET.Assimp.Scene* scene;
         lock (_assimpLock)
         {
-            var scene = _assimp.ImportFile(fbxPath,
-                (uint)(PostProcessSteps.Triangulate |
-                    PostProcessSteps.GenerateNormals |
-                    PostProcessSteps.FlipUVs |
-                    PostProcessSteps.JoinIdenticalVertices));
+            scene = _assimp.ImportFile(fbxPath,
+            (uint)(PostProcessSteps.Triangulate |
+                PostProcessSteps.GenerateNormals |
+                PostProcessSteps.FlipUVs |
+                PostProcessSteps.JoinIdenticalVertices));
+        }
 
-            if (scene == null)
+        if (scene == null)
+            throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
+
+        try
+        {
+            if ((scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
                 throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
 
-            try
-            {
-                if ((scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
-                    throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
-
-                ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
-            }
-            finally
+            ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
+        }
+        finally
+        {
+            lock (_assimpLock)
             {
                 _assimp.FreeScene(scene);
             }
@@ -179,9 +183,13 @@ public static class ModelLoader
     private static unsafe string? GetDiffuseTexturePath(Silk.NET.Assimp.Material* mat)
     {
         AssimpString path = default;
-        var result = _assimp.GetMaterialTexture(mat,
-            TextureType.Diffuse, 0, ref path,
-            null, null, null, null, null, null);
+        Return result;
+        lock (_assimpLock)
+        {
+            result = _assimp.GetMaterialTexture(mat,
+                TextureType.Diffuse, 0, ref path,
+                null, null, null, null, null, null);
+        }
         if (result != Return.Success) return null;
         string s = path.AsString;
         return string.IsNullOrWhiteSpace(s) ? null : s;

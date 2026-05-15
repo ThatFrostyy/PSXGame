@@ -58,7 +58,7 @@ public class Game
             {
                 if (key == Key.F)
                 {
-                    if (_playerController.TryToggleFlashlight(_camera))
+                    if (_camera != null && _playerController.TryToggleFlashlight(_camera))
                     {
                         _ambient?.PlayFlashlightClick();
                     }
@@ -89,6 +89,9 @@ public class Game
 
     private void OnUpdate(double delta)
     {
+        if (_camera == null || _keyboard == null || _mouse == null)
+            return;
+
         float dt = (float)delta;
         if (_keyboard.IsKeyPressed(Key.Escape)) _window.Close();
 

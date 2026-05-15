@@ -96,11 +96,11 @@ public sealed class PlayerController
             float overlap = radius + PlayerRadius;
             Vector2D<float> delta = playerPos2D - treePos;
             float distSq = delta.LengthSquared;
-            if (distSq >= overlap * overlap || distSq <= 0.0001f)
+            if (distSq >= overlap * overlap)
                 continue;
 
             float dist = MathF.Sqrt(distSq);
-            Vector2D<float> pushDir = delta / dist;
+            Vector2D<float> pushDir = dist > 0.0001f ? delta / dist : new Vector2D<float>(0, 1);
             playerPos2D = treePos + (pushDir * overlap);
         }
 

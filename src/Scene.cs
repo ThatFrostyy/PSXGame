@@ -151,6 +151,8 @@ public class Scene : IDisposable
 
     private bool IsFarEnough(Vector2D<float> candidate, float minDistSq)
     {
+        if (candidate.LengthSquared < 9f) return false; // 3m safe zone around start
+
         foreach (var collider in _treeColliders)
         {
             Vector2D<float> delta = candidate - collider.Position;

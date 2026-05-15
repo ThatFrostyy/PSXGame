@@ -124,7 +124,8 @@ public class Scene : IDisposable
             float scale  = 0.005f + rng.NextSingle() * 0.003f;
             float yaw    = rng.NextSingle() * MathF.Tau;
             var pos = new Vector2D<float>(x, z);
-            if (!IsFarFromTrees(pos, BushCollisionRadius * BushCollisionRadius)) continue;
+            float treeBushDist = TreeCollisionRadius + BushCollisionRadius;
+            if (!IsFarFromTrees(pos, treeBushDist * treeBushDist)) continue;
             if (!IsFarEnough(pos, _bushColliders, (BushCollisionRadius * 2f) * (BushCollisionRadius * 2f))) continue;
 
             if (bushModels.Count == 0) continue;

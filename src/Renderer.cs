@@ -55,7 +55,7 @@ public class Renderer : IDisposable
 
         _batteryTexture = LoadBatteryTexture();
         _groundTexture = LoadGroundTexture();
-        _wallTexture = LoadTextureFromPath(repeat: true, "tile", "Tile_11-128x128.png");
+        _wallTexture = LoadTextureFromPath(repeat: true, "grass", "grass06.png");
         _whiteTex       = MakeWhiteTexture();
 
         _planeShader.Use();
@@ -225,6 +225,7 @@ public class Renderer : IDisposable
 
         // Perimeter walls (tile billboard, open top for skybox visibility)
         _propShader.SetMatrix4("uModel", Matrix4X4<float>.Identity);
+        _propShader.SetInt("uUseInstancing", 0);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _wallTexture);
         scene.WallMesh.Draw();

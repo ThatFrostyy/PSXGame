@@ -18,6 +18,7 @@ public static class ModelLoader
 {
     // Shared Assimp instance — cheap to reuse across loads.
     private static readonly Assimp _assimp = Assimp.GetApi();
+    private static readonly Dictionary<string, LoadedModel> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
 
     public record LoadedModel(List<(Mesh Mesh, uint Texture)> Parts) : IDisposable
     {
@@ -30,6 +31,10 @@ public static class ModelLoader
 
     public static unsafe LoadedModel Load(GL gl, string fbxPath, string textureDir)
     {
+        string cacheKey = Path.GetFullPath(fbxPath);
+        if (_loadedModelCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
         var scene = _assimp.ImportFile(fbxPath,
             (uint)(PostProcessSteps.Triangulate |
                 PostProcessSteps.GenerateNormals |
@@ -45,7 +50,16 @@ public static class ModelLoader
         var parts = new List<(Mesh, uint)>();
         ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
         _assimp.FreeScene(scene);
-        return new LoadedModel(parts);
+        var loaded = new LoadedModel(parts);
+        _loadedModelCache[cacheKey] = loaded;
+        return loaded;
+    }
+
+    public static void ClearCache()
+    {
+        foreach (var model in _loadedModelCache.Values)
+            model.Dispose();
+        _loadedModelCache.Clear();
     }
 
     private static unsafe void ProcessNode(GL gl, Silk.NET.Assimp.Scene* scene,

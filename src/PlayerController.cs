@@ -1,5 +1,6 @@
 using System;
 using Silk.NET.Input;
+using Silk.NET.Maths;
 
 namespace PSXGame;
 
@@ -10,6 +11,7 @@ public sealed class PlayerController
     private const float MouseSensitivity = 0.12f;
     private const float FootstepInterval = 0.47f;
     private const float LowBatteryThreshold = 0.2f;
+    private const float PlayerRadius = 0.5f;
     private float _batterySeconds = BatteryLifeSeconds;
     private float _footstepTimer;
 
@@ -19,6 +21,7 @@ public sealed class PlayerController
         float mouseDeltaX,
         float mouseDeltaY,
         float dt,
+        Scene scene,
         Random rng,
         Action<Random>? playFootstep,
         Action<bool>? setFlashlightFlickerLoop)
@@ -26,6 +29,7 @@ public sealed class PlayerController
         ArgumentNullException.ThrowIfNull(camera);
         ArgumentNullException.ThrowIfNull(keyboard);
         ArgumentNullException.ThrowIfNull(rng);
+        ArgumentNullException.ThrowIfNull(scene);
 
         camera.Yaw += mouseDeltaX * MouseSensitivity;
         camera.Pitch -= mouseDeltaY * MouseSensitivity;
@@ -44,8 +48,10 @@ public sealed class PlayerController
             float invLen = 1f / MathF.Sqrt((moveForward * moveForward) + (moveRight * moveRight));
             moveForward *= invLen;
             moveRight *= invLen;
+            Vector3D<float> before = camera.Position;
             camera.MoveForward(moveForward * MoveSpeed * dt);
             camera.MoveRight(moveRight * MoveSpeed * dt);
+            ResolveWorldCollisions(camera, before, scene);
 
             _footstepTimer -= dt;
             if (_footstepTimer <= 0f)
@@ -74,6 +80,31 @@ public sealed class PlayerController
         bool flickerOff = shouldFlicker && rng.NextSingle() < (0.12f + (LowBatteryThreshold - batteryLevel) * 1.8f);
         camera.FlashlightIntensity = flickerOff ? 0f : 1f;
         camera.BatteryLevel = batteryLevel;
+    }
+
+    private static void ResolveWorldCollisions(Camera camera, Vector3D<float> fallbackPos, Scene scene)
+    {
+        float edge = Scene.MapHalfExtent - PlayerRadius;
+        var clamped = camera.Position;
+        clamped.X = Math.Clamp(clamped.X, -edge, edge);
+        clamped.Z = Math.Clamp(clamped.Z, -edge, edge);
+        camera.Position = clamped;
+
+        var playerPos2D = new Vector2D<float>(camera.Position.X, camera.Position.Z);
+        foreach (var (treePos, radius) in scene.TreeColliders)
+        {
+            float overlap = radius + PlayerRadius;
+            Vector2D<float> delta = playerPos2D - treePos;
+            float distSq = delta.LengthSquared;
+            if (distSq >= overlap * overlap || distSq <= 0.0001f)
+                continue;
+
+            float dist = MathF.Sqrt(distSq);
+            Vector2D<float> pushDir = delta / dist;
+            playerPos2D = treePos + (pushDir * overlap);
+        }
+
+        camera.Position = new Vector3D<float>(playerPos2D.X, fallbackPos.Y, playerPos2D.Y);
     }
 
     public bool TryToggleFlashlight(Camera camera)

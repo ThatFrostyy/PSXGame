@@ -68,6 +68,7 @@ public class Renderer : IDisposable
 
         _upscaleShader.Use();
         _upscaleShader.SetInt("uScene", 0);
+        _upscaleShader.SetFloat("uMapHalfExtent", Scene.MapHalfExtent);
 
         CreateFbo();
         CreateQuad(out _quadVao, out _quadVbo);
@@ -282,6 +283,7 @@ public class Renderer : IDisposable
         _upscaleShader.Use();
         _upscaleShader.SetVector2("uScreenSize", new Vector2D<float>(_screenSize.X, _screenSize.Y));
         _upscaleShader.SetVector2("uPsxSize",    new Vector2D<float>(PsxW, PsxH));
+        _upscaleShader.SetVector2("uCameraXZ", new Vector2D<float>(cam.Position.X, cam.Position.Z));
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _fboColorTex);
         _gl.BindVertexArray(_quadVao);

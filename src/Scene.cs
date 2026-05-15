@@ -69,7 +69,7 @@ public class Scene : IDisposable
         string treeTexDir = ResolveDir("src", "textures", "trees"); 
         var treeModels = CacheModels(gl, selectedTreeFiles, treeTexDir);
 
-        const int treeCount = 30;
+        const int treeCount = 38;
         const float treeRingMin = 28f;
         const float treeRingMax = 37f;
         for (int i = 0; i < treeCount; i++)

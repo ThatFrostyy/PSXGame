@@ -126,7 +126,7 @@ public class Game
             if (_footstepTimer <= 0f)
             {
                 _ambient?.PlayDirtFootstep(_rng);
-                _footstepTimer = 0.43f;
+                _footstepTimer = 0.47f;
             }
         }
         else

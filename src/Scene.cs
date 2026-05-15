@@ -23,10 +23,6 @@ public class Scene : IDisposable
     public IReadOnlyDictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> PropsByModel => _propsByModel;
     private readonly Dictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> _propsByModel = new();
 
-    // Textures shared across all prop draws (keyed by GL handle)
-    // Loaded models own their per-mesh textures; extra fallback textures live here.
-    private readonly List<uint> _ownedTextures = new();
-
     public Scene(GL gl)
     {
         PlaneMesh = BuildPlane(gl);
@@ -213,7 +209,5 @@ public class Scene : IDisposable
         // Models are centrally owned/cached by ModelLoader.
         ModelLoader.ClearCache();
 
-        foreach (var tex in _ownedTextures)
-            ; // textures are owned by LoadedModel, nothing extra here
     }
 }

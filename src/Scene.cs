@@ -32,6 +32,7 @@ public class Scene : IDisposable
     public IReadOnlyList<(Vector2D<float> Position, float Radius)> TreeColliders => _treeColliders;
     private readonly List<(Vector2D<float> Position, float Radius)> _treeColliders = new();
     private readonly List<(Vector2D<float> Position, float Radius)> _bushColliders = new();
+    public FenderEnemy Fender { get; private set; } = null!;
 
     public Scene(GL gl)
     {
@@ -39,6 +40,15 @@ public class Scene : IDisposable
         WallMesh = BuildWalls(gl);
         Skybox = new Skybox(gl);
         SpawnProps(gl);
+        SpawnFender(gl);
+    }
+
+    private void SpawnFender(GL gl)
+    {
+        string modelPath = ResolveDir("src", "models", "fender.fbx");
+        string textureDir = ResolveDir("src", "textures", "enemy", "fender");
+        var model = ModelLoader.Load(gl, modelPath, textureDir);
+        Fender = new FenderEnemy(model, new Vector2D<float>(10f, 10f));
     }
 
     private static Mesh BuildWalls(GL gl)

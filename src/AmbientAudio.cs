@@ -18,6 +18,9 @@ public sealed class AmbientAudio : IDisposable
     private readonly uint _flickerSource;
     private readonly uint[] _dirtFootstepBuffers = new uint[5];
     private readonly uint _footstepSource;
+    private readonly uint[] _twigBuffers = new uint[3];
+    private readonly uint _twigSource;
+    private readonly uint _enemyFootstepSource;
     private readonly bool _isInitialized;
     private bool _isFlickerPlaying;
 
@@ -50,6 +53,8 @@ public sealed class AmbientAudio : IDisposable
         _flickerBuffer = _al.GenBuffer();
         _flickerSource = _al.GenSource();
         _footstepSource = _al.GenSource();
+        _twigSource = _al.GenSource();
+        _enemyFootstepSource = _al.GenSource();
 
         // Load assets BEFORE marking as initialized so that if LoadWav throws,
         // Dispose() (called by the catch block below) can safely clean up the
@@ -100,6 +105,22 @@ public sealed class AmbientAudio : IDisposable
             _al.SetSourceProperty(_footstepSource, SourceBoolean.Looping, false);
             _al.SetSourceProperty(_footstepSource, SourceFloat.Gain, 0.6f);
 
+            for (int i = 0; i < _twigBuffers.Length; i++)
+            {
+                _twigBuffers[i] = _al.GenBuffer();
+                var twigWav = LoadWav(ResolveSoundPath($"twig0{i + 1}.wav"));
+                fixed (byte* p = twigWav.Data)
+                {
+                    _al.BufferData(_twigBuffers[i], twigWav.Format, p, twigWav.Data.Length, twigWav.SampleRate);
+                }
+            }
+
+            _al.SetSourceProperty(_twigSource, SourceBoolean.Looping, false);
+            _al.SetSourceProperty(_twigSource, SourceFloat.Gain, 0.8f);
+
+            _al.SetSourceProperty(_enemyFootstepSource, SourceBoolean.Looping, false);
+            _al.SetSourceProperty(_enemyFootstepSource, SourceFloat.Gain, 0.8f);
+
             // Only mark fully initialized once every resource is ready.
             _isInitialized = true;
         }
@@ -123,10 +144,14 @@ public sealed class AmbientAudio : IDisposable
         if (_flashlightSource != 0) { _al.SourceStop(_flashlightSource); _al.DeleteSource(_flashlightSource); }
         if (_flickerSource != 0) { _al.SourceStop(_flickerSource); _al.DeleteSource(_flickerSource); }
         if (_footstepSource != 0) { _al.SourceStop(_footstepSource); _al.DeleteSource(_footstepSource); }
+        if (_twigSource != 0) { _al.SourceStop(_twigSource); _al.DeleteSource(_twigSource); }
+        if (_enemyFootstepSource != 0) { _al.SourceStop(_enemyFootstepSource); _al.DeleteSource(_enemyFootstepSource); }
         if (_ambientBuffer  != 0) _al.DeleteBuffer(_ambientBuffer);
         if (_flashlightBuffer != 0) _al.DeleteBuffer(_flashlightBuffer);
         if (_flickerBuffer != 0) _al.DeleteBuffer(_flickerBuffer);
         foreach (var buffer in _dirtFootstepBuffers)
+            if (buffer != 0) _al.DeleteBuffer(buffer);
+        foreach (var buffer in _twigBuffers)
             if (buffer != 0) _al.DeleteBuffer(buffer);
         if (_context != 0) _alc.DestroyContext((Context*)_context);
         if (_device  != 0) _alc.CloseDevice((Device*)_device);
@@ -155,6 +180,35 @@ public sealed class AmbientAudio : IDisposable
             _al.SourceStop(_flickerSource);
             _isFlickerPlaying = false;
         }
+    }
+
+
+    public unsafe void SetListener(Vector3D<float> position, Vector3D<float> forward, Vector3D<float> up)
+    {
+        if (!_isInitialized) return;
+        _al.SetListenerProperty(ListenerVector3.Position, position.X, position.Y, position.Z);
+        float* orient = stackalloc float[6] { forward.X, forward.Y, forward.Z, up.X, up.Y, up.Z };
+        _al.SetListenerProperty(ListenerFloatArray.Orientation, orient);
+    }
+
+    public void PlayTwigBreak(Random rng, Vector3D<float> worldPos)
+    {
+        if (!_isInitialized || _twigBuffers.Length == 0) return;
+        uint selectedBuffer = _twigBuffers[rng.Next(_twigBuffers.Length)];
+        _al.SourceStop(_twigSource);
+        _al.SetSourceProperty(_twigSource, SourceInteger.Buffer, (int)selectedBuffer);
+        _al.SetSourceProperty(_twigSource, SourceVector3.Position, worldPos.X, worldPos.Y, worldPos.Z);
+        _al.SourcePlay(_twigSource);
+    }
+
+    public void PlayEnemyFootstep(Random rng, Vector3D<float> worldPos)
+    {
+        if (!_isInitialized || _dirtFootstepBuffers.Length == 0) return;
+        uint selectedBuffer = _dirtFootstepBuffers[rng.Next(_dirtFootstepBuffers.Length)];
+        _al.SourceStop(_enemyFootstepSource);
+        _al.SetSourceProperty(_enemyFootstepSource, SourceInteger.Buffer, (int)selectedBuffer);
+        _al.SetSourceProperty(_enemyFootstepSource, SourceVector3.Position, worldPos.X, worldPos.Y, worldPos.Z);
+        _al.SourcePlay(_enemyFootstepSource);
     }
 
     public void PlayDirtFootstep(Random rng)

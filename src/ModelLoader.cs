@@ -13,9 +13,15 @@ namespace PSXGame;
 /// Loads an FBX (or any Assimp-supported format) into one or more GPU meshes,
 /// each paired with an optional diffuse texture.
 /// </summary>
+/// <remarks>
+/// Assimp calls are serialized with a private lock because this loader uses a shared
+/// static <see cref="Assimp"/> API instance. This guarantees that import/material-query/free
+/// operations in this class do not execute concurrently.
+/// </remarks>
 public static class ModelLoader
 {
     private static readonly Assimp _assimp = Assimp.GetApi();
+    private static readonly object _assimpLock = new();
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, LoadedModel> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
 
     // Updated record to include the GL context for cleanup
@@ -43,20 +49,29 @@ public static class ModelLoader
         if (_loadedModelCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        var scene = _assimp.ImportFile(fbxPath,
-            (uint)(PostProcessSteps.Triangulate |
-                PostProcessSteps.GenerateNormals |
-                PostProcessSteps.FlipUVs |
-                PostProcessSteps.JoinIdenticalVertices));
-
-        if (scene == null || (scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
-            throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
-
         string modelBaseName = Path.GetFileNameWithoutExtension(fbxPath);
         var parts = new List<(Mesh, uint)>();
-        
-        ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
-        _assimp.FreeScene(scene);
+
+        lock (_assimpLock)
+        {
+            var scene = _assimp.ImportFile(fbxPath,
+                (uint)(PostProcessSteps.Triangulate |
+                    PostProcessSteps.GenerateNormals |
+                    PostProcessSteps.FlipUVs |
+                    PostProcessSteps.JoinIdenticalVertices));
+
+            if (scene == null || (scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
+                throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
+
+            try
+            {
+                ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
+            }
+            finally
+            {
+                _assimp.FreeScene(scene);
+            }
+        }
 
         // Pass the GL context to the record so it can delete textures later
         var loaded = new LoadedModel(gl, parts);

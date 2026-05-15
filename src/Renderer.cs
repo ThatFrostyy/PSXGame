@@ -51,6 +51,9 @@ public class Renderer : IDisposable
         _groundTexture = LoadGroundTexture();
         _whiteTex       = MakeWhiteTexture();
 
+        _planeShader.Use();
+        _planeShader.SetInt("uGroundTex", 0);
+
         CreateFbo();
         CreateQuad(out _quadVao, out _quadVbo);
         CreateHudQuad(out _hudVao, out _hudVbo);
@@ -179,7 +182,6 @@ public class Renderer : IDisposable
         _planeShader.SetVec3("uLightPos", lightPos);
         float flashlight = cam.FlashlightOn ? cam.FlashlightIntensity : 0f;
         _planeShader.SetFloat("uFlashlightOn", flashlight);
-        _planeShader.SetInt("uGroundTex", 0);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _groundTexture);
         _planeShader.SetVector2("uResolution", new Vector2D<float>(PsxW, PsxH));
@@ -274,12 +276,7 @@ public class Renderer : IDisposable
     // -------------------------------------------------------------------------
     private uint LoadBatteryTexture()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "battery.png");
-        if (!File.Exists(path))
-            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "battery.png");
-        using var fs = File.OpenRead(path);
-        var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
-        return UploadTexture((uint)img.Width, (uint)img.Height, img.Data, repeat: false);
+        return LoadTextureFromPath(repeat: false, "battery.png");
     }
 
     private uint MakeWhiteTexture()
@@ -290,12 +287,18 @@ public class Renderer : IDisposable
 
     private uint LoadGroundTexture()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "grass", "grass01.png");
+        return LoadTextureFromPath(repeat: true, "grass", "grass01.png");
+    }
+
+    private uint LoadTextureFromPath(bool repeat, params string[] relativePathSegments)
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", Path.Combine(relativePathSegments));
         if (!File.Exists(path))
-            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "grass", "grass01.png");
+            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", Path.Combine(relativePathSegments));
+
         using var fs = File.OpenRead(path);
         var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
-        return UploadTexture((uint)img.Width, (uint)img.Height, img.Data, repeat: true);
+        return UploadTexture((uint)img.Width, (uint)img.Height, img.Data, repeat);
     }
 
     private uint UploadTexture(uint w, uint h, byte[] data, bool repeat)

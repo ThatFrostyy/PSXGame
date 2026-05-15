@@ -373,16 +373,15 @@ public class Renderer : IDisposable
     {
         string vertPath = ResolveShaderPath(vertexShaderFile);
         string fragPath = ResolveShaderPath(fragmentShaderFile);
-        string vertSource = File.ReadAllText(vertPath);
-        string fragSource = File.ReadAllText(fragPath);
-
         try
         {
+            string vertSource = File.ReadAllText(vertPath);
+            string fragSource = File.ReadAllText(fragPath);
             return new ShaderProgram(gl, vertSource, fragSource);
         }
         catch (Exception ex)
         {
-            throw new Exception($"Failed to compile/link shaders '{vertexShaderFile}' and '{fragmentShaderFile}' ({vertPath}, {fragPath}): {ex.Message}", ex);
+            throw new Exception($"Failed to load or compile shaders '{vertexShaderFile}' and '{fragmentShaderFile}' ({vertPath}, {fragPath}): {ex.Message}", ex);
         }
     }
 

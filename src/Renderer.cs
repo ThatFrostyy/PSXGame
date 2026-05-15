@@ -204,7 +204,24 @@ public class Renderer : IDisposable
         }
         _gl.Enable(EnableCap.CullFace);
 
-        // ---- PASS 2: upscale FBO → screen with PSX post-processing -----------
+        // ---- PASS 2: HUD drawn into PSX-res buffer (so post FX affect UI) ---
+        _gl.Disable(EnableCap.DepthTest);
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+
+        float hudAspect = (float)PsxW / PsxH;
+        _batteryShader.Use();
+        _batteryShader.SetFloat("uBatteryLevel", cam.BatteryLevel);
+        _batteryShader.SetInt("uBatteryTex", 0);
+        _batteryShader.SetFloat("uAspectRatio", hudAspect);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _batteryTexture);
+        _gl.BindVertexArray(_hudVao);
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        _gl.BindVertexArray(0);
+        _gl.Disable(EnableCap.Blend);
+
+        // ---- PASS 3: upscale FBO → screen with PSX post-processing -----------
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         _gl.Viewport(0, 0, (uint)_screenSize.X, (uint)_screenSize.Y);
         _gl.Clear(ClearBufferMask.ColorBufferBit);
@@ -221,23 +238,6 @@ public class Renderer : IDisposable
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
         _gl.BindVertexArray(0);
 
-        // ---- PASS 3: HUD drawn at full resolution on top ---------------------
-        _gl.Disable(EnableCap.DepthTest);
-        _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-        float hudAspect = (float)_screenSize.X / _screenSize.Y;
-        _batteryShader.Use();
-        _batteryShader.SetFloat("uBatteryLevel", cam.BatteryLevel);
-        _batteryShader.SetInt("uBatteryTex", 0);
-        _batteryShader.SetFloat("uAspectRatio", hudAspect);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _batteryTexture);
-        _gl.BindVertexArray(_hudVao);
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
-        _gl.BindVertexArray(0);
-
-        _gl.Disable(EnableCap.Blend);
         _gl.Enable(EnableCap.CullFace);
         _gl.Enable(EnableCap.DepthTest);
     }
@@ -342,7 +342,7 @@ public class Renderer : IDisposable
 "    col=col*(1.0+lit*7.0*vec3(1.0,0.90,0.70));\n" +
 // fog swallows everything
 "    vec3 fogColor=vec3(0.01,0.02,0.06);\n" +
-"    float fog=smoothstep(3.0,16.0,length(vWorldPos-uCamPos));\n" +
+"    float fog=smoothstep(2.5,11.0,length(vWorldPos-uCamPos));\n" +
 "    col=mix(col,fogColor,fog);\n" +
 // PSX colour crush (fewer steps = more banding)
 "    col=floor(col*24.0)/24.0;\n" +
@@ -389,7 +389,7 @@ public class Renderer : IDisposable
 "    col=col*(1.0+lit*7.0*vec3(1.0,0.90,0.70));\n" +
 // fog
 "    vec3 fogColor=vec3(0.01,0.02,0.06);\n" +
-"    float fog=smoothstep(3.0,16.0,length(vWorldPos-uCamPos));\n" +
+"    float fog=smoothstep(2.5,11.0,length(vWorldPos-uCamPos));\n" +
 "    col=mix(col,fogColor,fog);\n" +
 "    col=floor(col*24.0)/24.0;\n" +
 "    fragColor=vec4(col,1.0);\n" +

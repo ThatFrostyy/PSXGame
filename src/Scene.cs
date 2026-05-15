@@ -106,6 +106,7 @@ public class Scene : IDisposable
             if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
             AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
+        }
     }
 
     private void AddProp(ModelLoader.LoadedModel model, Matrix4X4<float> transform)
@@ -116,7 +117,6 @@ public class Scene : IDisposable
             _propsByModel[model] = transforms;
         }
         transforms.Add(transform);
-    }
     }
 
     /// <summary>

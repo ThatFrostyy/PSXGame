@@ -220,12 +220,16 @@ public class Renderer : IDisposable
 
             bool useInstancing = transforms.Count > InstancingFallbackThreshold;
 
+            if (useInstancing)
+            {
+                UploadInstanceTransforms(transforms);
+            }
+
             foreach (var (mesh, tex) in model.Parts)
             {
                 _gl.BindTexture(TextureTarget.Texture2D, tex != 0 ? tex : _whiteTex);
                 if (useInstancing)
                 {
-                    UploadInstanceTransforms(transforms);
                     mesh.ConfigureInstanceMatrixAttributes(_instanceVbo);
                     mesh.DrawInstanced((uint)transforms.Count);
                 }
@@ -354,7 +358,7 @@ public class Renderer : IDisposable
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _instanceVbo);
         unsafe
         {
-            fixed (Matrix4X4<float>* ptr = transforms.ToArray())
+            fixed (Matrix4X4<float>* ptr = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(transforms))
             {
                 _gl.BufferData(
                     BufferTargetARB.ArrayBuffer,

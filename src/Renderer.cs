@@ -61,6 +61,7 @@ public class Renderer : IDisposable
 
         _propShader.Use();
         _propShader.SetInt("uDiffuse", 0);
+        _propShader.SetInt("uUseInstancing", 0);
 
         _batteryShader.Use();
         _batteryShader.SetInt("uBatteryTex", 0);
@@ -235,6 +236,7 @@ public class Renderer : IDisposable
                 _gl.BindTexture(TextureTarget.Texture2D, tex != 0 ? tex : _whiteTex);
                 if (useInstancing)
                 {
+                    _propShader.SetInt("uUseInstancing", 1);
                     if (_configuredInstanceMeshes.Add(mesh))
                     {
                         mesh.ConfigureInstanceMatrixAttributes(_instanceVbo);
@@ -243,6 +245,7 @@ public class Renderer : IDisposable
                 }
                 else
                 {
+                    _propShader.SetInt("uUseInstancing", 0);
                     foreach (var transform in transforms)
                     {
                         _propShader.SetMatrix4("uModel", transform);

@@ -9,10 +9,11 @@ layout(location=6) in vec4 iModelCol2;
 layout(location=7) in vec4 iModelCol3;
 out vec3 vColor; out vec2 vUV; out vec3 vWorldPos; out vec3 vNormal;
 uniform mat4 uModel, uView, uProjection;
+uniform int uUseInstancing;
 void main(){
     vColor=aColor; vUV=aUV;
     mat4 instanceModel = mat4(iModelCol0, iModelCol1, iModelCol2, iModelCol3);
-    mat4 model = (instanceModel[3][3] == 0.0) ? uModel : instanceModel;
+    mat4 model = (uUseInstancing == 1) ? instanceModel : uModel;
     vec4 wp=model*vec4(aPos,1.0); vWorldPos=wp.xyz;
     vNormal=normalize(mat3(model)*aNormal);
     vec4 clip=uProjection*uView*wp;

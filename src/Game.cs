@@ -26,7 +26,7 @@ public class Game
     {
         var options = WindowOptions.Default with
         {
-            Title = "Night Walk",
+            Title = "Night In Serbia",
             Size = new Vector2D<int>(960, 720),
             API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core,
                 ContextFlags.Default, new APIVersion(3, 3)),
@@ -76,7 +76,6 @@ public class Game
             }
 
             _gl.Enable(EnableCap.DepthTest);
-            Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
         }
         catch (Exception ex)
         {

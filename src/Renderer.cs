@@ -36,6 +36,9 @@ public class Renderer : IDisposable
     // HUD quad (drawn at full res on top of upscaled image)
     private readonly uint _hudVao;
     private readonly uint _hudVbo;
+    private readonly uint _instanceVbo;
+
+    private const int InstancingFallbackThreshold = 2;
 
     public Renderer(GL gl, Vector2D<int> screenSize)
     {
@@ -66,6 +69,8 @@ public class Renderer : IDisposable
         CreateFbo();
         CreateQuad(out _quadVao, out _quadVbo);
         CreateHudQuad(out _hudVao, out _hudVbo);
+
+        _instanceVbo = _gl.GenBuffer();
     }
 
     // -------------------------------------------------------------------------
@@ -208,13 +213,30 @@ public class Renderer : IDisposable
         _propShader.SetFloat("uFlashlightOn", flashlight);
         _propShader.SetVector2("uResolution", new Vector2D<float>(PsxW, PsxH));
         _gl.ActiveTexture(TextureUnit.Texture0);
-        foreach (var prop in scene.Props)
+        foreach (var (model, transforms) in scene.PropsByModel)
         {
-            _propShader.SetMatrix4("uModel", prop.Transform);
-            foreach (var (mesh, tex) in prop.Model.Parts)
+            if (transforms.Count == 0)
+                continue;
+
+            bool useInstancing = transforms.Count > InstancingFallbackThreshold;
+
+            foreach (var (mesh, tex) in model.Parts)
             {
                 _gl.BindTexture(TextureTarget.Texture2D, tex != 0 ? tex : _whiteTex);
-                mesh.Draw();
+                if (useInstancing)
+                {
+                    UploadInstanceTransforms(transforms);
+                    mesh.ConfigureInstanceMatrixAttributes(_instanceVbo);
+                    mesh.DrawInstanced((uint)transforms.Count);
+                }
+                else
+                {
+                    foreach (var transform in transforms)
+                    {
+                        _propShader.SetMatrix4("uModel", transform);
+                        mesh.Draw();
+                    }
+                }
             }
         }
         _gl.Enable(EnableCap.CullFace);
@@ -268,6 +290,7 @@ public class Renderer : IDisposable
         _gl.DeleteVertexArray(_quadVao);
         _gl.DeleteBuffer(_hudVbo);
         _gl.DeleteVertexArray(_hudVao);
+        _gl.DeleteBuffer(_instanceVbo);
         _gl.DeleteTexture(_batteryTexture);
         _gl.DeleteTexture(_groundTexture);
         _gl.DeleteTexture(_whiteTex);
@@ -326,6 +349,22 @@ public class Renderer : IDisposable
         return tex;
     }
 
+    private void UploadInstanceTransforms(List<Matrix4X4<float>> transforms)
+    {
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _instanceVbo);
+        unsafe
+        {
+            fixed (Matrix4X4<float>* ptr = transforms.ToArray())
+            {
+                _gl.BufferData(
+                    BufferTargetARB.ArrayBuffer,
+                    (nuint)(transforms.Count * sizeof(float) * 16),
+                    ptr,
+                    BufferUsageARB.StreamDraw);
+            }
+        }
+    }
+
     // =========================================================================
     // Shaders
     // =========================================================================
@@ -380,12 +419,18 @@ public class Renderer : IDisposable
 "layout(location=1) in vec3 aNormal;\n" +
 "layout(location=2) in vec2 aUV;\n" +
 "layout(location=3) in vec3 aColor;\n" +
+"layout(location=4) in vec4 iModelCol0;\n" +
+"layout(location=5) in vec4 iModelCol1;\n" +
+"layout(location=6) in vec4 iModelCol2;\n" +
+"layout(location=7) in vec4 iModelCol3;\n" +
 "out vec3 vColor; out vec2 vUV; out vec3 vWorldPos; out vec3 vNormal;\n" +
 "uniform mat4 uModel, uView, uProjection;\n" +
 "void main(){\n" +
 "    vColor=aColor; vUV=aUV;\n" +
-"    vec4 wp=uModel*vec4(aPos,1.0); vWorldPos=wp.xyz;\n" +
-"    vNormal=normalize(mat3(uModel)*aNormal);\n" +
+"    mat4 instanceModel = mat4(iModelCol0, iModelCol1, iModelCol2, iModelCol3);\n" +
+"    mat4 model = (instanceModel[3][3] == 0.0) ? uModel : instanceModel;\n" +
+"    vec4 wp=model*vec4(aPos,1.0); vWorldPos=wp.xyz;\n" +
+"    vNormal=normalize(mat3(model)*aNormal);\n" +
 "    vec4 clip=uProjection*uView*wp;\n" +
 "    clip.xy=floor(clip.xy*240.0)/240.0;\n" +
 "    gl_Position=clip;\n" +

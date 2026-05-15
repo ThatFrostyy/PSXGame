@@ -62,6 +62,31 @@ public class Mesh : IDisposable
         _gl.BindVertexArray(0);
     }
 
+    public void DrawInstanced(uint instanceCount)
+    {
+        _gl.BindVertexArray(_vao);
+        _gl.DrawArraysInstanced(PrimitiveType.Triangles, 0, (uint)_vertexCount, instanceCount);
+        _gl.BindVertexArray(0);
+    }
+
+    public unsafe void ConfigureInstanceMatrixAttributes(uint instanceVbo)
+    {
+        _gl.BindVertexArray(_vao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, instanceVbo);
+
+        const uint vec4Size = 4 * sizeof(float);
+        const uint mat4Size = 16 * sizeof(float);
+        for (uint i = 0; i < 4; i++)
+        {
+            uint attribLocation = 4 + i;
+            _gl.EnableVertexAttribArray(attribLocation);
+            _gl.VertexAttribPointer(attribLocation, 4, VertexAttribPointerType.Float, false, mat4Size, (void*)(i * vec4Size));
+            _gl.VertexAttribDivisor(attribLocation, 1);
+        }
+
+        _gl.BindVertexArray(0);
+    }
+
     public void Dispose()
     {
         _gl.DeleteVertexArray(_vao);

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Numerics;
+using System.Threading;
 using Silk.NET.Assimp;
 using Silk.NET.OpenGL;
 using Silk.NET.Maths;
@@ -22,7 +24,8 @@ public static class ModelLoader
 {
     private static readonly Assimp _assimp = Assimp.GetApi();
     private static readonly object _assimpLock = new();
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, LoadedModel> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, Lazy<LoadedModel>> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
+    private static int? _glThreadId;
 
     // Updated record to include the GL context for cleanup
     public record LoadedModel(GL Gl, List<(Mesh Mesh, uint Texture)> Parts) : IDisposable
@@ -45,52 +48,84 @@ public static class ModelLoader
 
     public static unsafe LoadedModel Load(GL gl, string fbxPath, string textureDir)
     {
+        EnsureOpenGlThread();
+
         string cacheKey = Path.GetFullPath(fbxPath);
-        if (_loadedModelCache.TryGetValue(cacheKey, out var cached))
-            return cached;
 
-        string modelBaseName = Path.GetFileNameWithoutExtension(fbxPath);
-        var parts = new List<(Mesh, uint)>();
-
-        Silk.NET.Assimp.Scene* scene;
-        lock (_assimpLock)
-        {
-            scene = _assimp.ImportFile(fbxPath,
-            (uint)(PostProcessSteps.Triangulate |
-                PostProcessSteps.GenerateNormals |
-                PostProcessSteps.FlipUVs |
-                PostProcessSteps.JoinIdenticalVertices));
-        }
-
-        if (scene == null)
-            throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
+        var lazy = _loadedModelCache.GetOrAdd(cacheKey, _ =>
+            new Lazy<LoadedModel>(
+                () => LoadUncached(gl, cacheKey, textureDir),
+                LazyThreadSafetyMode.ExecutionAndPublication));
 
         try
         {
-            if ((scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
+            return lazy.Value;
+        }
+        catch
+        {
+            _loadedModelCache.TryRemove(cacheKey, out _);
+            throw;
+        }
+    }
+
+    public static void ClearCache()
+    {
+        foreach (var lazy in _loadedModelCache.Values)
+        {
+            if (lazy.IsValueCreated)
+                lazy.Value.Dispose();
+        }
+        _loadedModelCache.Clear();
+    }
+
+    private static unsafe LoadedModel LoadUncached(GL gl, string fbxPath, string textureDir)
+    {
+        string modelBaseName = Path.GetFileNameWithoutExtension(fbxPath);
+        var parts = new List<(Mesh, uint)>();
+
+        lock (_assimpLock)
+        {
+            Silk.NET.Assimp.Scene* scene = _assimp.ImportFile(fbxPath,
+                (uint)(PostProcessSteps.Triangulate |
+                    PostProcessSteps.GenerateNormals |
+                    PostProcessSteps.FlipUVs |
+                    PostProcessSteps.JoinIdenticalVertices));
+
+            if (scene == null)
                 throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
 
-            ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
-        }
-        finally
-        {
-            lock (_assimpLock)
+            try
+            {
+                if ((scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
+                    throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
+
+                ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
+            }
+            finally
             {
                 _assimp.FreeScene(scene);
             }
         }
 
-        // Pass the GL context to the record so it can delete textures later
-        var loaded = new LoadedModel(gl, parts);
-        _loadedModelCache[cacheKey] = loaded;
-        return loaded;
+        return new LoadedModel(gl, parts);
     }
 
-    public static void ClearCache()
+    private static void EnsureOpenGlThread()
     {
-        foreach (var model in _loadedModelCache.Values)
-            model.Dispose();
-        _loadedModelCache.Clear();
+        int currentThread = Environment.CurrentManagedThreadId;
+        int? expectedThread = _glThreadId;
+
+        if (expectedThread is null)
+        {
+            Interlocked.CompareExchange(ref _glThreadId, currentThread, null);
+            expectedThread = _glThreadId;
+        }
+
+        if (expectedThread != currentThread)
+        {
+            throw new InvalidOperationException(
+                "ModelLoader.Load must run on the same thread as the active OpenGL context.");
+        }
     }
 
     private static unsafe void ProcessNode(GL gl, Silk.NET.Assimp.Scene* scene,

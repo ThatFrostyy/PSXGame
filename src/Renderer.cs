@@ -297,6 +297,7 @@ public class Renderer : IDisposable
 
     public void Dispose()
     {
+        _configuredInstanceMeshes.Clear();
         DestroyFbo();
         _gl.DeleteBuffer(_quadVbo);
         _gl.DeleteVertexArray(_quadVao);

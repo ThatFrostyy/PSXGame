@@ -45,10 +45,10 @@ public class Renderer : IDisposable
         _gl = gl;
         _screenSize = screenSize;
 
-        _planeShader   = new ShaderProgram(gl, PlaneVert,   PlaneFrag);
-        _propShader    = new ShaderProgram(gl, PropVert,    PropFrag);
-        _batteryShader = new ShaderProgram(gl, HudVert,     HudFrag);
-        _upscaleShader = new ShaderProgram(gl, UpscaleVert, UpscaleFrag);
+        _planeShader   = CreateShaderProgram(gl, "plane.vert.glsl", "plane.frag.glsl");
+        _propShader    = CreateShaderProgram(gl, "prop.vert.glsl", "prop.frag.glsl");
+        _batteryShader = CreateShaderProgram(gl, "hud.vert.glsl", "hud.frag.glsl");
+        _upscaleShader = CreateShaderProgram(gl, "upscale.vert.glsl", "upscale.frag.glsl");
 
         _batteryTexture = LoadBatteryTexture();
         _groundTexture = LoadGroundTexture();
@@ -369,193 +369,33 @@ public class Renderer : IDisposable
         }
     }
 
-    // =========================================================================
-    // Shaders
-    // =========================================================================
+    private ShaderProgram CreateShaderProgram(GL gl, string vertexShaderFile, string fragmentShaderFile)
+    {
+        string vertPath = ResolveShaderPath(vertexShaderFile);
+        string fragPath = ResolveShaderPath(fragmentShaderFile);
+        string vertSource = File.ReadAllText(vertPath);
+        string fragSource = File.ReadAllText(fragPath);
 
-    // --- Shared verts (plane + prop) -----------------------------------------
-    private const string PlaneVert =
-"#version 330 core\n" +
-"layout(location=0) in vec3 aPos;\n" +
-"layout(location=1) in vec3 aNormal;\n" +
-"layout(location=2) in vec2 aUV;\n" +
-"layout(location=3) in vec3 aColor;\n" +
-"out vec3 vColor; out vec2 vUV; out vec3 vWorldPos;\n" +
-"uniform mat4 uModel, uView, uProjection;\n" +
-"void main(){\n" +
-"    vColor=aColor; vUV=aUV*40.0;\n" +
-"    vec4 wp=uModel*vec4(aPos,1.0); vWorldPos=wp.xyz;\n" +
-"    vec4 clip=uProjection*uView*wp;\n" +
-"    clip.xy=floor(clip.xy*240.0)/240.0;\n" +  // vertex snap
-"    gl_Position=clip;\n" +
-"}\n";
+        try
+        {
+            return new ShaderProgram(gl, vertSource, fragSource);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Failed to compile/link shaders '{vertexShaderFile}' and '{fragmentShaderFile}' ({vertPath}, {fragPath}): {ex.Message}", ex);
+        }
+    }
 
-    private const string PlaneFrag =
-"#version 330 core\n" +
-"in vec3 vColor; in vec2 vUV; in vec3 vWorldPos;\n" +
-"out vec4 fragColor;\n" +
-"uniform sampler2D uGroundTex;\n" +
-"uniform vec3 uCamPos, uLightPos, uCamDir;\n" +
-"uniform float uFlashlightOn;\n" +
-"uniform vec2 uResolution;\n" +
-"void main(){\n" +
-"    vec3 tex=texture(uGroundTex,vUV).rgb;\n" +
-"    vec3 col=tex*vColor*0.72;\n" +
-// flashlight: bright cone that multiplies existing colour
-"    vec3 toFrag=normalize(vWorldPos-uLightPos);\n" +
-"    float beam=pow(max(dot(toFrag,uCamDir),0.0),12.0)*uFlashlightOn;\n" +
-"    float dist=length(vWorldPos-uLightPos);\n" +
-"    float atten=smoothstep(18.0,0.5,dist);\n" +
-"    float lit=beam*atten;\n" +
-"    col=col*(1.0+lit*7.0*vec3(1.0,0.90,0.70));\n" +
-// fog swallows everything
-"    vec3 fogColor=vec3(0.01,0.02,0.06);\n" +
-"    float fog=smoothstep(2.5,11.0,length(vWorldPos-uCamPos));\n" +
-"    col=mix(col,fogColor,fog);\n" +
-// PSX colour crush (fewer steps = more banding)
-"    col=floor(col*24.0)/24.0;\n" +
-"    fragColor=vec4(col,1.0);\n" +
-"}\n";
+    private string ResolveShaderPath(string shaderFile)
+    {
+        string baseDirPath = Path.Combine(AppContext.BaseDirectory, "src", "shaders", shaderFile);
+        if (File.Exists(baseDirPath))
+            return baseDirPath;
 
-    private const string PropVert =
-"#version 330 core\n" +
-"layout(location=0) in vec3 aPos;\n" +
-"layout(location=1) in vec3 aNormal;\n" +
-"layout(location=2) in vec2 aUV;\n" +
-"layout(location=3) in vec3 aColor;\n" +
-"layout(location=4) in vec4 iModelCol0;\n" +
-"layout(location=5) in vec4 iModelCol1;\n" +
-"layout(location=6) in vec4 iModelCol2;\n" +
-"layout(location=7) in vec4 iModelCol3;\n" +
-"out vec3 vColor; out vec2 vUV; out vec3 vWorldPos; out vec3 vNormal;\n" +
-"uniform mat4 uModel, uView, uProjection;\n" +
-"void main(){\n" +
-"    vColor=aColor; vUV=aUV;\n" +
-"    mat4 instanceModel = mat4(iModelCol0, iModelCol1, iModelCol2, iModelCol3);\n" +
-"    mat4 model = (instanceModel[3][3] == 0.0) ? uModel : instanceModel;\n" +
-"    vec4 wp=model*vec4(aPos,1.0); vWorldPos=wp.xyz;\n" +
-"    vNormal=normalize(mat3(model)*aNormal);\n" +
-"    vec4 clip=uProjection*uView*wp;\n" +
-"    clip.xy=floor(clip.xy*240.0)/240.0;\n" +
-"    gl_Position=clip;\n" +
-"}\n";
+        string cwdPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "shaders", shaderFile);
+        if (File.Exists(cwdPath))
+            return cwdPath;
 
-    private const string PropFrag =
-"#version 330 core\n" +
-"in vec3 vColor; in vec2 vUV; in vec3 vWorldPos; in vec3 vNormal;\n" +
-"out vec4 fragColor;\n" +
-"uniform sampler2D uDiffuse;\n" +
-"uniform vec3 uCamPos, uLightPos, uCamDir;\n" +
-"uniform float uFlashlightOn;\n" +
-"uniform vec2 uResolution;\n" +
-"void main(){\n" +
-"    vec4 texel=texture(uDiffuse,vUV);\n" +
-"    if(texel.a<0.3) discard;\n" +
-"    vec3 col=texel.rgb*vColor*vec3(0.26,0.30,0.36);\n" +
-"    float ambient=0.06+0.04*max(dot(vNormal,normalize(vec3(0.3,0.6,-0.7))),0.0);\n" +
-"    col*=(ambient+0.2);\n" +
-// same flashlight as ground
-"    vec3 toFrag=normalize(vWorldPos-uLightPos);\n" +
-"    float beam=pow(max(dot(toFrag,uCamDir),0.0),12.0)*uFlashlightOn;\n" +
-"    float dist=length(vWorldPos-uLightPos);\n" +
-"    float atten=smoothstep(18.0,0.5,dist);\n" +
-"    float lit=beam*atten;\n" +
-"    col=col*(1.0+lit*7.0*vec3(1.0,0.90,0.70));\n" +
-// fog
-"    vec3 fogColor=vec3(0.01,0.02,0.06);\n" +
-"    float fog=smoothstep(2.5,11.0,length(vWorldPos-uCamPos));\n" +
-"    col=mix(col,fogColor,fog);\n" +
-"    col=floor(col*24.0)/24.0;\n" +
-"    fragColor=vec4(col,1.0);\n" +
-"}\n";
-
-    // --- Upscale pass: nearest-neighbour + scanlines + vignette + dither -----
-    private const string UpscaleVert =
-"#version 330 core\n" +
-"layout(location=0) in vec2 aPos;\n" +
-"layout(location=1) in vec2 aUV;\n" +
-"out vec2 vUV;\n" +
-"void main(){ vUV=aUV; gl_Position=vec4(aPos,0.0,1.0); }\n";
-
-    private const string UpscaleFrag =
-"#version 330 core\n" +
-"in vec2 vUV;\n" +
-"out vec4 fragColor;\n" +
-"uniform sampler2D uScene;\n" +
-"uniform vec2 uScreenSize;\n" +
-"uniform vec2 uPsxSize;\n" +
-"void main(){\n" +
-// Nearest-neighbour sample (texture already set to NEAREST, but be explicit)
-"    vec3 col=texture(uScene,vUV).rgb;\n" +
-// Scanlines: every other screen-pixel row darkened, based on PSX pixel row
-"    float psxRow=floor(vUV.y*uPsxSize.y);\n" +
-"    float scanline=mod(psxRow,2.0)<1.0 ? 0.75 : 1.0;\n" +
-"    col*=scanline;\n" +
-// Aperture-grille vertical lines (subtle)
-"    float psxCol=floor(vUV.x*uPsxSize.x);\n" +
-"    float grille=mod(psxCol,3.0)<2.0 ? 1.0 : 0.82;\n" +
-"    col*=grille;\n" +
-// Ordered dither at screen res to break up banding
-"    vec2 px=floor(vUV*uScreenSize);\n" +
-"    float bayer=fract(sin(dot(px,vec2(12.9898,78.233)))*43758.5453);\n" +
-"    col+=(bayer-0.5)/55.0;\n" +
-// Vignette
-"    vec2 uv2=vUV*2.0-1.0;\n" +
-"    float vig=1.0-dot(uv2,uv2)*0.45;\n" +
-"    vig=clamp(vig,0.0,1.0);\n" +
-"    col*=vig;\n" +
-// Slight green-tint CRT phosphor shift
-"    col=vec3(col.r*0.96, col.g*1.02, col.b*0.94);\n" +
-"    fragColor=vec4(clamp(col,0.0,1.0),1.0);\n" +
-"}\n";
-
-    // --- HUD shaders (unchanged) ----------------------------------------------
-    private const string HudVert =
-"#version 330 core\n" +
-"layout(location=0) in vec2 aPos;\n" +
-"layout(location=1) in vec2 aUV;\n" +
-"out vec2 vUV;\n" +
-"uniform float uAspectRatio;\n" +
-"void main(){\n" +
-"    vec2 scale=vec2(0.07,0.07*uAspectRatio);\n" +
-"    vec2 offset=vec2(-0.82,-0.65);\n" +
-"    gl_Position=vec4(aPos*scale+offset,0.0,1.0);\n" +
-"    vUV=aUV;\n" +
-"}\n";
-
-    private const string HudFrag =
-"#version 330 core\n" +
-"in vec2 vUV;\n" +
-"out vec4 fragColor;\n" +
-"uniform sampler2D uBatteryTex;\n" +
-"uniform float uBatteryLevel;\n" +
-"void main(){\n" +
-"    vec2 uv=vec2(vUV.x,1.0-vUV.y);\n" +
-"    vec4 tex=texture(uBatteryTex,uv);\n" +
-"    if(tex.a<0.05) discard;\n" +
-"    float luma=dot(tex.rgb,vec3(0.299,0.587,0.114));\n" +
-"    if(luma>=0.5){ fragColor=vec4(floor(tex.rgb*28.0)/28.0,tex.a); return; }\n" +
-"    float l=0.263,r=0.773,b=0.133,t=0.922;\n" +
-"    if(uv.x<l||uv.x>r||uv.y<b||uv.y>t){ fragColor=vec4(0,0,0,1); return; }\n" +
-"    vec2 inner=vec2((uv.x-l)/(r-l),(uv.y-b)/(t-b));\n" +
-"    float cellIndex=floor(inner.y*3.0);\n" +
-"    float cellLocalY=fract(inner.y*3.0);\n" +
-"    float cellLocalX=inner.x;\n" +
-"    float cellW=153.0,cellH=104.0;\n" +
-"    vec2 cellPx=vec2(cellLocalX*cellW,cellLocalY*cellH);\n" +
-"    float padPx=8.0,radiusPx=10.0;\n" +
-"    vec2 innerSize=vec2(cellW-padPx*2.0,cellH-padPx*2.0);\n" +
-"    vec2 q=abs(cellPx-vec2(cellW,cellH)*0.5)-innerSize*0.5+vec2(radiusPx);\n" +
-"    float sdf=length(max(q,0.0))-radiusPx;\n" +
-"    if(sdf>0.0){ fragColor=vec4(0,0,0,1); return; }\n" +
-"    float cellFilled=(1.0-clamp(uBatteryLevel,0.0,1.0))*3.0;\n" +
-"    bool lit=cellIndex>=floor(cellFilled);\n" +
-"    if(cellIndex==floor(cellFilled)) lit=cellLocalY>=fract(cellFilled);\n" +
-"    vec3 col;\n" +
-"    if(!lit)                       col=vec3(0.0,0.0,0.0);\n" +
-"    else if(uBatteryLevel>0.66)    col=vec3(0.06,0.82,0.19);\n" +
-"    else if(uBatteryLevel>0.33)    col=vec3(0.83,0.68,0.07);\n" +
-"    else                           col=vec3(0.82,0.12,0.06);\n" +
-"    fragColor=vec4(floor(col*28.0)/28.0,1.0);\n" +
-"}\n";
+        throw new FileNotFoundException($"Shader file not found: {shaderFile}. Tried '{baseDirPath}' and '{cwdPath}'.");
+    }
 }

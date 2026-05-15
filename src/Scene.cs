@@ -62,14 +62,14 @@ public class Scene : IDisposable
         string modelDir   = ResolveDir("src", "models");
         string textureDir = ResolveDir("src", "textures");
 
-        var rng = new Random(1337); // fixed seed → same layout every run
+        var rng = new Random(1337);
 
-        // --- Trees: ring around the edge (radius 28-38, outside fog zone) -------
-        // Discover how many tree variants exist (tree1.fbx, tree2.fbx, …)
+        // --- Trees ---
         var treeFiles = DiscoverModels(modelDir, "tree");
-        var treeModels = CacheModels(gl, treeFiles, textureDir);
+        // Resolve the specific subdirectory for tree textures
+        string treeTexDir = ResolveDir("src", "textures", "trees"); 
+        var treeModels = CacheModels(gl, treeFiles, treeTexDir);
 
-        // Place ~30 trees in a ring, slight radius randomness so it doesn't look uniform
         const int treeCount = 30;
         const float treeRingMin = 28f;
         const float treeRingMax = 37f;
@@ -79,7 +79,7 @@ public class Scene : IDisposable
             float radius = treeRingMin + rng.NextSingle() * (treeRingMax - treeRingMin);
             float x      = MathF.Cos(angle) * radius;
             float z      = MathF.Sin(angle) * radius;
-            float scale = 0.009f + rng.NextSingle() * 0.003f;  // try this first, adjust if still too big/small
+            float scale  = 0.009f + rng.NextSingle() * 0.003f;
             float yaw    = rng.NextSingle() * MathF.Tau;
 
             if (treeModels.Count == 0) continue;
@@ -87,19 +87,20 @@ public class Scene : IDisposable
             _props.Add(new PropInstance(model, MakeTRS(x, 0f, z, yaw, scale)));
         }
 
-        // --- Bushes: scattered inside radius 3-12 (near player) -----------------
+        // --- Bushes ---
         var bushFiles = DiscoverModels(modelDir, "bush");
-        var bushModels = CacheModels(gl, bushFiles, textureDir);
+        // Resolve the specific subdirectory for bush textures
+        string bushTexDir = ResolveDir("src", "textures", "bushes");
+        var bushModels = CacheModels(gl, bushFiles, bushTexDir);
 
         const int bushCount = 10;
         for (int i = 0; i < bushCount; i++)
         {
-            // Polar placement, avoid spawning right on top of the player (min r=3)
             float angle  = rng.NextSingle() * MathF.Tau;
             float radius = 6f + rng.NextSingle() * 14f;
             float x      = MathF.Cos(angle) * radius;
             float z      = MathF.Sin(angle) * radius;
-            float scale = 0.005f + rng.NextSingle() * 0.003f;
+            float scale  = 0.005f + rng.NextSingle() * 0.003f;
             float yaw    = rng.NextSingle() * MathF.Tau;
 
             if (bushModels.Count == 0) continue;

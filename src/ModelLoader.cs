@@ -12,20 +12,28 @@ namespace PSXGame;
 /// <summary>
 /// Loads an FBX (or any Assimp-supported format) into one or more GPU meshes,
 /// each paired with an optional diffuse texture.
-/// Vertex layout matches the existing Mesh stride: pos(3)+normal(3)+uv(2)+color(3) = 11 floats.
 /// </summary>
 public static class ModelLoader
 {
-    // Shared Assimp instance — cheap to reuse across loads.
     private static readonly Assimp _assimp = Assimp.GetApi();
-    private static readonly Dictionary<string, LoadedModel> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, LoadedModel> _loadedModelCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public record LoadedModel(List<(Mesh Mesh, uint Texture)> Parts) : IDisposable
+    // Updated record to include the GL context for cleanup
+    public record LoadedModel(GL Gl, List<(Mesh Mesh, uint Texture)> Parts) : IDisposable
     {
         public void Dispose()
         {
-            foreach (var (mesh, _) in Parts)
+            foreach (var (mesh, texture) in Parts)
+            {
+                // Clean up the Mesh (VBO/VAO)
                 mesh.Dispose();
+                
+                // Explicitly delete the texture from GPU memory
+                if (texture != 0)
+                {
+                    Gl.DeleteTexture(texture);
+                }
+            }
         }
     }
 
@@ -44,13 +52,14 @@ public static class ModelLoader
         if (scene == null || (scene->MFlags & Assimp.SceneFlagsIncomplete) != 0 || scene->MRootNode == null)
             throw new InvalidDataException($"Assimp failed to load '{fbxPath}'");
 
-        // Derive a base name for name-convention texture lookup (e.g. "tree01")
         string modelBaseName = Path.GetFileNameWithoutExtension(fbxPath);
-
         var parts = new List<(Mesh, uint)>();
+        
         ProcessNode(gl, scene, scene->MRootNode, textureDir, modelBaseName, parts);
         _assimp.FreeScene(scene);
-        var loaded = new LoadedModel(parts);
+
+        // Pass the GL context to the record so it can delete textures later
+        var loaded = new LoadedModel(gl, parts);
         _loadedModelCache[cacheKey] = loaded;
         return loaded;
     }
@@ -120,7 +129,6 @@ public static class ModelLoader
         var mesh = new Mesh(gl, flat.ToArray());
         uint tex = 0;
 
-        // 1. Try texture path embedded in FBX material
         if (aiMesh->MMaterialIndex < scene->MNumMaterials)
         {
             var mat = scene->MMaterials[aiMesh->MMaterialIndex];
@@ -134,7 +142,6 @@ public static class ModelLoader
             }
         }
 
-        // 2. Fallback: match by model name convention (tree01.fbx → tree01.png / .jpg)
         if (tex == 0)
         {
             foreach (var ext in new[] { ".png", ".jpg", ".jpeg" })
@@ -176,7 +183,6 @@ public static class ModelLoader
                     (uint)img.Width, (uint)img.Height, 0,
                     PixelFormat.Rgba, PixelType.UnsignedByte, p);
         }
-        // Nearest for that PSX look
         gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Nearest);
         gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Nearest);
         gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.Repeat);

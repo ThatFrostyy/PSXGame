@@ -54,6 +54,15 @@ public class Renderer : IDisposable
         _planeShader.Use();
         _planeShader.SetInt("uGroundTex", 0);
 
+        _propShader.Use();
+        _propShader.SetInt("uDiffuse", 0);
+
+        _batteryShader.Use();
+        _batteryShader.SetInt("uBatteryTex", 0);
+
+        _upscaleShader.Use();
+        _upscaleShader.SetInt("uScene", 0);
+
         CreateFbo();
         CreateQuad(out _quadVao, out _quadVbo);
         CreateHudQuad(out _hudVao, out _hudVbo);
@@ -198,7 +207,6 @@ public class Renderer : IDisposable
         _propShader.SetVec3("uLightPos",  lightPos);
         _propShader.SetFloat("uFlashlightOn", flashlight);
         _propShader.SetVector2("uResolution", new Vector2D<float>(PsxW, PsxH));
-        _propShader.SetInt("uDiffuse", 0);
         _gl.ActiveTexture(TextureUnit.Texture0);
         foreach (var prop in scene.Props)
         {
@@ -219,7 +227,6 @@ public class Renderer : IDisposable
         float hudAspect = (float)PsxW / PsxH;
         _batteryShader.Use();
         _batteryShader.SetFloat("uBatteryLevel", cam.BatteryLevel);
-        _batteryShader.SetInt("uBatteryTex", 0);
         _batteryShader.SetFloat("uAspectRatio", hudAspect);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _batteryTexture);
@@ -236,7 +243,6 @@ public class Renderer : IDisposable
         _gl.Disable(EnableCap.CullFace);
 
         _upscaleShader.Use();
-        _upscaleShader.SetInt("uScene", 0);
         _upscaleShader.SetVector2("uScreenSize", new Vector2D<float>(_screenSize.X, _screenSize.Y));
         _upscaleShader.SetVector2("uPsxSize",    new Vector2D<float>(PsxW, PsxH));
         _gl.ActiveTexture(TextureUnit.Texture0);
@@ -292,9 +298,10 @@ public class Renderer : IDisposable
 
     private uint LoadTextureFromPath(bool repeat, params string[] relativePathSegments)
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", Path.Combine(relativePathSegments));
+        string relativePath = Path.Combine(relativePathSegments);
+        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", relativePath);
         if (!File.Exists(path))
-            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", Path.Combine(relativePathSegments));
+            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", relativePath);
 
         using var fs = File.OpenRead(path);
         var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
@@ -349,11 +356,8 @@ public class Renderer : IDisposable
 "uniform float uFlashlightOn;\n" +
 "uniform vec2 uResolution;\n" +
 "void main(){\n" +
-"    vec2 g=abs(fract(vUV-0.5)-0.5)/fwidth(vUV);\n" +
-"    float line=1.0-min(min(g.x,g.y),1.0);\n" +
 "    vec3 tex=texture(uGroundTex,vUV).rgb;\n" +
-"    vec3 col=(tex*vec3(0.58,0.38,0.24))*vColor+line*0.04;\n" +
-"    col*=vec3(0.30,0.28,0.22);\n" +
+"    vec3 col=tex*vColor*0.72;\n" +
 // flashlight: bright cone that multiplies existing colour
 "    vec3 toFrag=normalize(vWorldPos-uLightPos);\n" +
 "    float beam=pow(max(dot(toFrag,uCamDir),0.0),12.0)*uFlashlightOn;\n" +

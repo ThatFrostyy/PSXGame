@@ -106,6 +106,7 @@ public class Game
             dx,
             dy,
             dt,
+            _scene,
             _rng,
             rng => _ambient?.PlayDirtFootstep(rng),
             enabled => _ambient?.SetFlashlightFlickerLoop(enabled));

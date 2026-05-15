@@ -15,6 +15,11 @@ public readonly record struct PropInstance(
 public class Scene : IDisposable
 {
     private const int MaxLoadedTreeVariants = 10;
+    public const float MapHalfExtent = 75f;
+    private const float EdgeForestBand = 16f;
+    private const float InnerForestRadius = 18f;
+    private const float TreeCollisionRadius = 1.45f;
+    private const float BushCollisionRadius = 0.8f;
 
     public Mesh PlaneMesh { get; private set; }
     public Skybox Skybox { get; private set; }
@@ -22,6 +27,8 @@ public class Scene : IDisposable
     /// <summary>Placed tree and bush instances grouped by model, ready for instanced rendering.</summary>
     public IReadOnlyDictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> PropsByModel => _propsByModel;
     private readonly Dictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> _propsByModel = new();
+    public IReadOnlyList<(Vector2D<float> Position, float Radius)> TreeColliders => _treeColliders;
+    private readonly List<(Vector2D<float> Position, float Radius)> _treeColliders = new();
 
     public Scene(GL gl)
     {
@@ -35,7 +42,7 @@ public class Scene : IDisposable
     // -------------------------------------------------------------------------
     private static Mesh BuildPlane(GL gl)
     {
-        float s = 40f;
+        float s = MapHalfExtent;
         var verts = new List<float>();
 
         void V(float x, float z, float u, float v)
@@ -69,22 +76,7 @@ public class Scene : IDisposable
         string treeTexDir = ResolveDir("src", "textures", "trees"); 
         var treeModels = CacheModels(gl, selectedTreeFiles, treeTexDir);
 
-        const int treeCount = 40;
-        const float treeRingMin = 28f;
-        const float treeRingMax = 37f;
-        for (int i = 0; i < treeCount; i++)
-        {
-            float angle  = i * (MathF.Tau / treeCount) + rng.NextSingle() * 0.4f;
-            float radius = treeRingMin + rng.NextSingle() * (treeRingMax - treeRingMin);
-            float x      = MathF.Cos(angle) * radius;
-            float z      = MathF.Sin(angle) * radius;
-            float scale  = 0.009f + rng.NextSingle() * 0.003f;
-            float yaw    = rng.NextSingle() * MathF.Tau;
-
-            if (treeModels.Count == 0) continue;
-            var model = treeModels[rng.Next(treeModels.Count)];
-            AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
-        }
+        SpawnTrees(rng, treeModels);
 
         // --- Bushes ---
         var bushFiles = DiscoverModels(modelDir, "bush");
@@ -92,11 +84,11 @@ public class Scene : IDisposable
         string bushTexDir = ResolveDir("src", "textures", "bushes");
         var bushModels = CacheModels(gl, bushFiles, bushTexDir);
 
-        const int bushCount = 10;
+        const int bushCount = 26;
         for (int i = 0; i < bushCount; i++)
         {
             float angle  = rng.NextSingle() * MathF.Tau;
-            float radius = 6f + rng.NextSingle() * 14f;
+            float radius = 7f + rng.NextSingle() * (MapHalfExtent - 14f);
             float x      = MathF.Cos(angle) * radius;
             float z      = MathF.Sin(angle) * radius;
             float scale  = 0.005f + rng.NextSingle() * 0.003f;
@@ -105,7 +97,66 @@ public class Scene : IDisposable
             if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
             AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
+            _treeColliders.Add((new Vector2D<float>(x, z), BushCollisionRadius));
         }
+    }
+
+    private void SpawnTrees(Random rng, List<ModelLoader.LoadedModel> treeModels)
+    {
+        if (treeModels.Count == 0) return;
+
+        // Dense tree belt near the map edges.
+        SpawnTreeGroup(rng, treeModels, count: 180, minDist: 2.5f, samplePosition: () =>
+        {
+            float x = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
+            float z = (rng.NextSingle() * 2f - 1f) * MapHalfExtent;
+            if (MathF.Abs(x) < MapHalfExtent - EdgeForestBand && MathF.Abs(z) < MapHalfExtent - EdgeForestBand)
+            {
+                bool verticalBand = rng.NextSingle() < 0.5f;
+                if (verticalBand) x = MathF.CopySign(MapHalfExtent - rng.NextSingle() * EdgeForestBand, rng.NextSingle() < 0.5f ? -1f : 1f);
+                else z = MathF.CopySign(MapHalfExtent - rng.NextSingle() * EdgeForestBand, rng.NextSingle() < 0.5f ? -1f : 1f);
+            }
+            return new Vector2D<float>(x, z);
+        });
+
+        // Middle forest cluster.
+        SpawnTreeGroup(rng, treeModels, count: 70, minDist: 2.9f, samplePosition: () =>
+        {
+            float angle = rng.NextSingle() * MathF.Tau;
+            float radius = rng.NextSingle() * InnerForestRadius;
+            return new Vector2D<float>(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
+        });
+    }
+
+    private void SpawnTreeGroup(Random rng, List<ModelLoader.LoadedModel> treeModels, int count, float minDist, Func<Vector2D<float>> samplePosition)
+    {
+        float minDistSq = minDist * minDist;
+        int placed = 0;
+        int attempts = 0;
+        while (placed < count && attempts < count * 30)
+        {
+            attempts++;
+            var pos = samplePosition();
+            if (!IsFarEnough(pos, minDistSq))
+                continue;
+
+            float scale = 0.009f + rng.NextSingle() * 0.003f;
+            float yaw = rng.NextSingle() * MathF.Tau;
+            var model = treeModels[rng.Next(treeModels.Count)];
+            AddProp(model, MakeTRS(pos.X, 0f, pos.Y, yaw, scale));
+            _treeColliders.Add((pos, TreeCollisionRadius));
+            placed++;
+        }
+    }
+
+    private bool IsFarEnough(Vector2D<float> candidate, float minDistSq)
+    {
+        foreach (var collider in _treeColliders)
+        {
+            Vector2D<float> delta = candidate - collider.Position;
+            if (delta.LengthSquared < minDistSq) return false;
+        }
+        return true;
     }
 
     private void AddProp(ModelLoader.LoadedModel model, Matrix4X4<float> transform)

@@ -17,9 +17,9 @@ public class Scene : IDisposable
     public Mesh PlaneMesh { get; private set; }
     public Skybox Skybox { get; private set; }
 
-    /// <summary>All placed tree and bush instances, ready for the renderer.</summary>
-    public IReadOnlyList<PropInstance> Props => _props;
-    private readonly List<PropInstance> _props = new();
+    /// <summary>Placed tree and bush instances grouped by model, ready for instanced rendering.</summary>
+    public IReadOnlyDictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> PropsByModel => _propsByModel;
+    private readonly Dictionary<ModelLoader.LoadedModel, List<Matrix4X4<float>>> _propsByModel = new();
 
     // Textures shared across all prop draws (keyed by GL handle)
     // Loaded models own their per-mesh textures; extra fallback textures live here.
@@ -84,7 +84,7 @@ public class Scene : IDisposable
 
             if (treeModels.Count == 0) continue;
             var model = treeModels[rng.Next(treeModels.Count)];
-            _props.Add(new PropInstance(model, MakeTRS(x, 0f, z, yaw, scale)));
+            AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
         }
 
         // --- Bushes ---
@@ -105,8 +105,18 @@ public class Scene : IDisposable
 
             if (bushModels.Count == 0) continue;
             var model = bushModels[rng.Next(bushModels.Count)];
-            _props.Add(new PropInstance(model, MakeTRS(x, 0f, z, yaw, scale)));
+            AddProp(model, MakeTRS(x, 0f, z, yaw, scale));
+    }
+
+    private void AddProp(ModelLoader.LoadedModel model, Matrix4X4<float> transform)
+    {
+        if (!_propsByModel.TryGetValue(model, out var transforms))
+        {
+            transforms = new List<Matrix4X4<float>>();
+            _propsByModel[model] = transforms;
         }
+        transforms.Add(transform);
+    }
     }
 
     /// <summary>
@@ -182,10 +192,10 @@ public class Scene : IDisposable
 
         // Dispose each unique model once (multiple PropInstances may share the same model)
         var disposed = new HashSet<ModelLoader.LoadedModel>();
-        foreach (var prop in _props)
+        foreach (var model in _propsByModel.Keys)
         {
-            if (disposed.Add(prop.Model))
-                prop.Model.Dispose();
+            if (disposed.Add(model))
+                model.Dispose();
         }
 
         foreach (var tex in _ownedTextures)

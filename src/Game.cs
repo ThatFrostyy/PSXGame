@@ -106,10 +106,21 @@ public class Game
         _camera.UpdateVectors();
 
         const float speed = 5f;
-        if (_keyboard.IsKeyPressed(Key.W)) _camera.MoveForward( speed * dt);
-        if (_keyboard.IsKeyPressed(Key.S)) _camera.MoveForward(-speed * dt);
-        if (_keyboard.IsKeyPressed(Key.A)) _camera.MoveRight(-speed * dt);
-        if (_keyboard.IsKeyPressed(Key.D)) _camera.MoveRight( speed * dt);
+        float moveForward = 0f;
+        float moveRight = 0f;
+        if (_keyboard.IsKeyPressed(Key.W)) moveForward += 1f;
+        if (_keyboard.IsKeyPressed(Key.S)) moveForward -= 1f;
+        if (_keyboard.IsKeyPressed(Key.D)) moveRight += 1f;
+        if (_keyboard.IsKeyPressed(Key.A)) moveRight -= 1f;
+
+        if (moveForward != 0f || moveRight != 0f)
+        {
+            float invLen = 1f / MathF.Sqrt((moveForward * moveForward) + (moveRight * moveRight));
+            moveForward *= invLen;
+            moveRight *= invLen;
+            _camera.MoveForward(moveForward * speed * dt);
+            _camera.MoveRight(moveRight * speed * dt);
+        }
 
         if (_camera.FlashlightOn)
         {

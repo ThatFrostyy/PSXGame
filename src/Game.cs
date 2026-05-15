@@ -56,7 +56,7 @@ public class Game
                 if (_batterySeconds > 0f)
                 {
                     _camera.FlashlightOn = !_camera.FlashlightOn;
-                    _ambient.PlayFlashlightClick();
+                    _ambient?.PlayFlashlightClick();
                 }
             }
         };
@@ -64,7 +64,15 @@ public class Game
         _camera   = new Camera(new Vector3D<float>(0f, 1.7f, 0f));
         _scene    = new Scene(_gl);
         _renderer = new Renderer(_gl, _window.Size);
-        _ambient = new AmbientAudio();
+        try
+        {
+            _ambient = new AmbientAudio();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"AmbientAudio failed to initialize: {ex.Message}. Continuing without audio.");
+            _ambient = null!;
+        }
 
         _gl.Enable(EnableCap.DepthTest);
         Console.WriteLine("WASD = move | Mouse = look | ESC = quit");
@@ -122,7 +130,7 @@ public class Game
     {
         _renderer.Dispose();
         _scene.Dispose();
-        _ambient.Dispose();
+        _ambient?.Dispose();
         _input.Dispose();
     }
 }

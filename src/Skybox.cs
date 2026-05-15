@@ -52,7 +52,11 @@ public class Skybox : IDisposable
             view.M31, view.M32, view.M33, 0,
             0, 0, 0, 1);
 
-        // Draw skybox behind everything: disable depth write, always pass depth test
+        // DepthTest must be ENABLED for DepthFunc/DepthMask to have any effect.
+        // We write gl_Position with w==1 and use DepthFunc.LessOrEqual so the
+        // skybox renders behind everything that was already in the depth buffer,
+        // but the depth buffer itself is not written (DepthMask false).
+        _gl.Enable(EnableCap.DepthTest);
         _gl.DepthFunc(DepthFunction.Always);
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
@@ -65,9 +69,11 @@ public class Skybox : IDisposable
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 36);
         _gl.BindVertexArray(0);
 
-        _gl.Enable(EnableCap.CullFace);
+        // Restore state to sane defaults for subsequent draws
         _gl.DepthMask(true);
         _gl.DepthFunc(DepthFunction.Less);
+        _gl.Enable(EnableCap.CullFace);
+        // NOTE: DepthTest stays enabled; Renderer.Render() relies on it.
     }
 
     public void Dispose()

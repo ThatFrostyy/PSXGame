@@ -8,24 +8,41 @@
     <Optimize>true</Optimize>
     <AssemblyName>PSXGame</AssemblyName>
     <RootNamespace>PSXGame</RootNamespace>
+
+    <!-- Single-file publish: dotnet publish -r win-x64 -c Release -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Silk.NET.OpenGL" Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Windowing" Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Input" Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Maths" Version="2.21.0" />
-    <PackageReference Include="Silk.NET.OpenAL" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.OpenGL"         Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Windowing"      Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Input"          Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Maths"          Version="2.21.0" />
+    <PackageReference Include="Silk.NET.OpenAL"         Version="2.21.0" />
     <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.21.0" />
-    <PackageReference Include="Silk.NET.Input.Glfw" Version="2.21.0" />
-    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+    <PackageReference Include="Silk.NET.Input.Glfw"     Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Assimp"         Version="2.21.0" />
+    <PackageReference Include="StbImageSharp"           Version="2.30.15" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="src/sounds/crickets.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="src/textures/battery.png">
+    <Content Include="src/sounds/flashlight.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Wildcard: picks up battery.png + all prop textures -->
+    <Content Include="src/textures/**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Wildcard: picks up tree1.fbx, bush1.fbx, etc. -->
+    <Content Include="src/models/**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

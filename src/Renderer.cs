@@ -11,8 +11,10 @@ public class Renderer : IDisposable
     private readonly GL _gl;
     private Vector2D<int> _screenSize;
     private readonly ShaderProgram _planeShader;
+    private readonly ShaderProgram _propShader;
     private readonly ShaderProgram _batteryShader;
     private readonly uint _batteryTexture;
+    private readonly uint _whiteTex;   // 1×1 white fallback for untextured prop meshes
     private readonly uint _hudVao;
     private readonly uint _hudVbo;
 
@@ -20,9 +22,11 @@ public class Renderer : IDisposable
     {
         _gl = gl;
         _screenSize = screenSize;
-        _planeShader = new ShaderProgram(gl, PlaneVert, PlaneFrag);
-        _batteryShader = new ShaderProgram(gl, HudVert, HudFrag);
+        _planeShader   = new ShaderProgram(gl, PlaneVert,  PlaneFrag);
+        _propShader    = new ShaderProgram(gl, PropVert,   PropFrag);
+        _batteryShader = new ShaderProgram(gl, HudVert,    HudFrag);
         _batteryTexture = LoadBatteryTexture();
+        _whiteTex = MakeWhiteTexture();
 
         _hudVao = _gl.GenVertexArray();
         _hudVbo = _gl.GenBuffer();
@@ -40,12 +44,8 @@ public class Renderer : IDisposable
         unsafe
         {
             fixed (float* p = hudVerts)
-            {
-                _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(hudVerts.Length * sizeof(float)), p, BufferUsageARB.StaticDraw);
-            }
-        }
-        unsafe
-        {
+                _gl.BufferData(BufferTargetARB.ArrayBuffer,
+                    (nuint)(hudVerts.Length * sizeof(float)), p, BufferUsageARB.StaticDraw);
             _gl.EnableVertexAttribArray(0);
             _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
             _gl.EnableVertexAttribArray(1);
@@ -64,29 +64,56 @@ public class Renderer : IDisposable
         var view = cam.GetViewMatrix();
         var proj = cam.GetProjectionMatrix(aspect);
 
-        // 1. Draw skybox first (depth always passes, no depth write)
+        // 1. Skybox
         scene.Skybox.Draw(view, proj);
 
-        // 2. Draw ground plane normally
-        _gl.Enable(EnableCap.DepthTest);
-        _gl.DepthFunc(DepthFunction.Less);
+        // 2. Ground plane
         _gl.Disable(EnableCap.CullFace);
 
         _planeShader.Use();
-        _planeShader.SetMatrix4("uView", view);
+        _planeShader.SetMatrix4("uView",       view);
         _planeShader.SetMatrix4("uProjection", proj);
-        _planeShader.SetMatrix4("uModel", Matrix4X4<float>.Identity);
-        _planeShader.SetVec3("uCamPos", cam.Position);
-        _planeShader.SetVec3("uCamDir", cam.Front);
-        Vector3D<float> lightPos = cam.Position + (cam.Front * 0.45f) - (cam.Up * 0.35f) + (cam.Right * 0.16f);
+        _planeShader.SetMatrix4("uModel",      Matrix4X4<float>.Identity);
+        _planeShader.SetVec3("uCamPos",  cam.Position);
+        _planeShader.SetVec3("uCamDir",  cam.Front);
+        Vector3D<float> lightPos = cam.Position
+            + (cam.Front * 0.45f) - (cam.Up * 0.35f) + (cam.Right * 0.16f);
         _planeShader.SetVec3("uLightPos", lightPos);
         float flashlight = cam.FlashlightOn ? cam.FlashlightIntensity : 0f;
         _planeShader.SetFloat("uFlashlightOn", flashlight);
         _planeShader.SetVector2("uResolution", new Vector2D<float>(_screenSize.X, _screenSize.Y));
         scene.PlaneMesh.Draw();
 
-        _gl.Disable(EnableCap.DepthTest);
+        // 3. Props — two-sided (no cull) for foliage, alpha-tested in shader
+        _gl.Enable(EnableCap.DepthTest);
         _gl.Disable(EnableCap.CullFace);
+
+        _propShader.Use();
+        _propShader.SetMatrix4("uView",       view);
+        _propShader.SetMatrix4("uProjection", proj);
+        _propShader.SetVec3("uCamPos",    cam.Position);
+        _propShader.SetVec3("uCamDir",    cam.Front);
+        _propShader.SetVec3("uLightPos",  lightPos);
+        _propShader.SetFloat("uFlashlightOn", flashlight);
+        _propShader.SetVector2("uResolution", new Vector2D<float>(_screenSize.X, _screenSize.Y));
+        _propShader.SetInt("uDiffuse", 0);
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+
+        foreach (var prop in scene.Props)
+        {
+            _propShader.SetMatrix4("uModel", prop.Transform);
+            foreach (var (mesh, tex) in prop.Model.Parts)
+            {
+                _gl.BindTexture(TextureTarget.Texture2D, tex != 0 ? tex : _whiteTex);
+                mesh.Draw();
+            }
+        }
+
+        _gl.Enable(EnableCap.CullFace);
+
+        // 4. HUD (battery) — no depth test, drawn on top
+        _gl.Disable(EnableCap.DepthTest);
         _gl.Enable(EnableCap.Blend);
         _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
@@ -99,49 +126,66 @@ public class Renderer : IDisposable
         _gl.BindVertexArray(_hudVao);
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
         _gl.BindVertexArray(0);
+
         _gl.Disable(EnableCap.Blend);
         _gl.Enable(EnableCap.CullFace);
     }
 
-    public void Resize(Vector2D<int> newSize)
-    {
-        _screenSize = newSize;
-    }
+    public void Resize(Vector2D<int> newSize) => _screenSize = newSize;
 
     public void Dispose()
     {
         _gl.DeleteTexture(_batteryTexture);
+        _gl.DeleteTexture(_whiteTex);
         _gl.DeleteBuffer(_hudVbo);
         _gl.DeleteVertexArray(_hudVao);
         _batteryShader.Dispose();
+        _propShader.Dispose();
         _planeShader.Dispose();
     }
 
+    // -------------------------------------------------------------------------
+    // Texture helpers
+    // -------------------------------------------------------------------------
     private uint LoadBatteryTexture()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "battery.png");
         if (!File.Exists(path))
-        {
             path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "battery.png");
-        }
 
         using var fs = File.OpenRead(path);
         var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
+        return UploadTexture((uint)img.Width, (uint)img.Height, img.Data, repeat: false);
+    }
+
+    private uint MakeWhiteTexture()
+    {
+        byte[] white = [255, 255, 255, 255];
+        return UploadTexture(1, 1, white, repeat: false);
+    }
+
+    private uint UploadTexture(uint w, uint h, byte[] data, bool repeat)
+    {
         uint tex = _gl.GenTexture();
         _gl.BindTexture(TextureTarget.Texture2D, tex);
         unsafe
         {
-            fixed (byte* p = img.Data)
-            {
-                _gl.TexImage2D(TextureTarget.Texture2D, 0, (int)InternalFormat.Rgba8, (uint)img.Width, (uint)img.Height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, p);
-            }
+            fixed (byte* p = data)
+                _gl.TexImage2D(TextureTarget.Texture2D, 0,
+                    (int)InternalFormat.Rgba8, w, h, 0,
+                    PixelFormat.Rgba, PixelType.UnsignedByte, p);
         }
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Nearest);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Nearest);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        int wrap = repeat ? (int)GLEnum.Repeat : (int)GLEnum.ClampToEdge;
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, wrap);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, wrap);
         return tex;
     }
+
+    // -------------------------------------------------------------------------
+    // Shaders
+    // -------------------------------------------------------------------------
 
     private const string PlaneVert =
 "#version 330 core\n" +
@@ -186,9 +230,9 @@ public class Renderer : IDisposable
 "    float bayer = fract(sin(dot(floor(d * 320.0), vec2(12.9898, 78.233))) * 43758.5453);\n" +
 "    col += (bayer - 0.5) / 90.0;\n" +
 "    vec3 toFrag = normalize(vWorldPos - uLightPos);\n" +
-"    float beam = pow(max(dot(toFrag, uCamDir), 0.0), 22.0) * uFlashlightOn;\n" +
+"    float beam = pow(max(dot(toFrag, uCamDir), 0.0), 28.0) * uFlashlightOn;\n" +
 "    float dist = length(vWorldPos - uLightPos);\n" +
-"    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(14.0, 0.0, dist) * 2.35;\n" +
+"    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(14.0, 0.0, dist) * 1.1;\n" +
 "    vec3 fogColor = vec3(0.015, 0.02, 0.03);\n" +
 "    float fog = smoothstep(7.5, 28.0, length(vWorldPos - uCamPos));\n" +
 "    col = mix(col, fogColor, fog);\n" +
@@ -196,20 +240,86 @@ public class Renderer : IDisposable
 "    fragColor = vec4(col, 1.0);\n" +
 "}\n";
 
-private const string HudVert =
+    private const string PropVert =
+"#version 330 core\n" +
+"layout(location=0) in vec3 aPos;\n" +
+"layout(location=1) in vec3 aNormal;\n" +
+"layout(location=2) in vec2 aUV;\n" +
+"layout(location=3) in vec3 aColor;\n" +
+"out vec3 vColor;\n" +
+"out vec2 vUV;\n" +
+"out vec3 vWorldPos;\n" +
+"out vec3 vNormal;\n" +
+"uniform mat4 uModel;\n" +
+"uniform mat4 uView;\n" +
+"uniform mat4 uProjection;\n" +
+"void main() {\n" +
+"    vColor    = aColor;\n" +
+"    vUV       = aUV;\n" +
+"    vec4 worldPos = uModel * vec4(aPos, 1.0);\n" +
+"    vWorldPos = worldPos.xyz;\n" +
+"    vNormal   = normalize(mat3(uModel) * aNormal);\n" +
+"    vec4 clip = uProjection * uView * worldPos;\n" +
+"    float snap = 240.0;\n" +
+"    clip.xy = floor(clip.xy * snap) / snap;\n" +
+"    gl_Position = clip;\n" +
+"}\n";
+
+    private const string PropFrag =
+"#version 330 core\n" +
+"in vec3 vColor;\n" +
+"in vec2 vUV;\n" +
+"in vec3 vWorldPos;\n" +
+"in vec3 vNormal;\n" +
+"out vec4 fragColor;\n" +
+"uniform sampler2D uDiffuse;\n" +
+"uniform vec3 uCamPos;\n" +
+"uniform vec3 uLightPos;\n" +
+"uniform vec3 uCamDir;\n" +
+"uniform float uFlashlightOn;\n" +
+"uniform vec2 uResolution;\n" +
+"void main() {\n" +
+"    vec4 texel = texture(uDiffuse, vUV);\n" +
+// Alpha test — cuts out foliage silhouettes cleanly
+"    if (texel.a < 0.3) discard;\n" +
+"    vec3 col = texel.rgb * vColor;\n" +
+// Match ground's base tint
+"    col *= vec3(0.26, 0.30, 0.36);\n" +
+// Cheap directional ambient from the moon direction
+"    float ambient = 0.06 + 0.04 * max(dot(vNormal, normalize(vec3(0.3,0.6,-0.7))), 0.0);\n" +
+"    col *= (ambient + 0.2);\n" +
+// Same bayer dither
+"    vec2 d = gl_FragCoord.xy / uResolution;\n" +
+"    float bayer = fract(sin(dot(floor(d * 320.0), vec2(12.9898, 78.233))) * 43758.5453);\n" +
+"    col += (bayer - 0.5) / 90.0;\n" +
+// Flashlight cone — identical params to ground
+"    vec3 toFrag = normalize(vWorldPos - uLightPos);\n" +
+"    float beam  = pow(max(dot(toFrag, uCamDir), 0.0), 28.0) * uFlashlightOn;\n" +
+"    float dist  = length(vWorldPos - uLightPos);\n" +
+"    col += vec3(1.0, 0.95, 0.8) * beam * smoothstep(14.0, 0.0, dist) * 1.1;\n" +
+// Fog — identical to ground
+"    vec3 fogColor = vec3(0.015, 0.02, 0.03);\n" +
+"    float fog = smoothstep(7.5, 28.0, length(vWorldPos - uCamPos));\n" +
+"    col = mix(col, fogColor, fog);\n" +
+// PSX quantise
+"    col = floor(col * 28.0) / 28.0;\n" +
+"    fragColor = vec4(col, 1.0);\n" +
+"}\n";
+
+    private const string HudVert =
 "#version 330 core\n" +
 "layout(location=0) in vec2 aPos;\n" +
 "layout(location=1) in vec2 aUV;\n" +
 "out vec2 vUV;\n" +
 "uniform float uAspectRatio;\n" +
 "void main(){\n" +
-"    vec2 scale = vec2(0.07, 0.07 * uAspectRatio);\n" +  // smaller
+"    vec2 scale = vec2(0.07, 0.07 * uAspectRatio);\n" +
 "    vec2 offset = vec2(-0.82, -0.65);\n" +
 "    gl_Position = vec4(aPos * scale + offset, 0.0, 1.0);\n" +
 "    vUV = aUV;\n" +
 "}\n";
 
-private const string HudFrag =
+    private const string HudFrag =
 "#version 330 core\n" +
 "in vec2 vUV;\n" +
 "out vec4 fragColor;\n" +
@@ -224,15 +334,12 @@ private const string HudFrag =
 "        fragColor = vec4(floor(tex.rgb * 28.0) / 28.0, tex.a);\n" +
 "        return;\n" +
 "    }\n" +
-    // exact inner bounds measured from texture pixels
-    // left=79/300, right=232/300, top=53/398, bottom=367/398
 "    float l=0.263, r=0.773, b=0.133, t=0.922;\n" +
 "    if (uv.x < l || uv.x > r || uv.y < b || uv.y > t) {\n" +
 "        fragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
 "        return;\n" +
 "    }\n" +
 "    vec2 inner = vec2((uv.x - l)/(r - l), (uv.y - b)/(t - b));\n" +
-    // inner area is 153x314px, each cell is 153x(314/3)=153x104px
 "    float cellIndex = floor(inner.y * 3.0);\n" +
 "    float cellLocalY = fract(inner.y * 3.0);\n" +
 "    float cellLocalX = inner.x;\n" +

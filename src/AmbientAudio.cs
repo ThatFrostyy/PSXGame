@@ -42,28 +42,58 @@ public sealed class AmbientAudio : IDisposable
         _ambientSource = _al.GenSource();
         _flashlightBuffer = _al.GenBuffer();
         _flashlightSource = _al.GenSource();
-        _isInitialized = true;
 
-        var ambientWav = LoadWav(ResolveSoundPath("crickets.wav"));
-        fixed (byte* p = ambientWav.Data)
+        // Load assets BEFORE marking as initialized so that if LoadWav throws,
+        // Dispose() (called by the catch block below) can safely clean up the
+        // OpenAL resources that were already allocated.
+        try
         {
-            _al.BufferData(_ambientBuffer, ambientWav.Format, p, ambientWav.Data.Length, ambientWav.SampleRate);
+            var ambientWav = LoadWav(ResolveSoundPath("crickets.wav"));
+            fixed (byte* p = ambientWav.Data)
+            {
+                _al.BufferData(_ambientBuffer, ambientWav.Format, p, ambientWav.Data.Length, ambientWav.SampleRate);
+            }
+
+            _al.SetSourceProperty(_ambientSource, SourceInteger.Buffer, (int)_ambientBuffer);
+            _al.SetSourceProperty(_ambientSource, SourceBoolean.Looping, true);
+            _al.SetSourceProperty(_ambientSource, SourceFloat.Gain, 0.35f);
+            _al.SourcePlay(_ambientSource);
+
+            var flashlightWav = LoadWav(ResolveSoundPath("flashlight.wav"));
+            fixed (byte* p = flashlightWav.Data)
+            {
+                _al.BufferData(_flashlightBuffer, flashlightWav.Format, p, flashlightWav.Data.Length, flashlightWav.SampleRate);
+            }
+
+            _al.SetSourceProperty(_flashlightSource, SourceInteger.Buffer, (int)_flashlightBuffer);
+            _al.SetSourceProperty(_flashlightSource, SourceBoolean.Looping, false);
+            _al.SetSourceProperty(_flashlightSource, SourceFloat.Gain, 0.85f);
+
+            // Only mark fully initialized once every resource is ready.
+            _isInitialized = true;
         }
-
-        _al.SetSourceProperty(_ambientSource, SourceInteger.Buffer, (int)_ambientBuffer);
-        _al.SetSourceProperty(_ambientSource, SourceBoolean.Looping, true);
-        _al.SetSourceProperty(_ambientSource, SourceFloat.Gain, 0.35f);
-        _al.SourcePlay(_ambientSource);
-
-        var flashlightWav = LoadWav(ResolveSoundPath("flashlight.wav"));
-        fixed (byte* p = flashlightWav.Data)
+        catch (Exception ex)
         {
-            _al.BufferData(_flashlightBuffer, flashlightWav.Format, p, flashlightWav.Data.Length, flashlightWav.SampleRate);
+            Console.Error.WriteLine($"Audio asset loading failed: {ex.Message}. Audio disabled.");
+            // Free the OpenAL objects we already allocated before rethrowing,
+            // because the constructor won't return an instance and Dispose()
+            // will never be called by the caller.
+            FreeOpenALResources();
         }
+    }
 
-        _al.SetSourceProperty(_flashlightSource, SourceInteger.Buffer, (int)_flashlightBuffer);
-        _al.SetSourceProperty(_flashlightSource, SourceBoolean.Looping, false);
-        _al.SetSourceProperty(_flashlightSource, SourceFloat.Gain, 0.85f);
+    /// <summary>
+    /// Releases OpenAL sources, buffers, context, and device.
+    /// Safe to call even when sources/buffers are 0 (not yet generated).
+    /// </summary>
+    private unsafe void FreeOpenALResources()
+    {
+        if (_ambientSource  != 0) { _al.SourceStop(_ambientSource);   _al.DeleteSource(_ambientSource);   }
+        if (_flashlightSource != 0) { _al.SourceStop(_flashlightSource); _al.DeleteSource(_flashlightSource); }
+        if (_ambientBuffer  != 0) _al.DeleteBuffer(_ambientBuffer);
+        if (_flashlightBuffer != 0) _al.DeleteBuffer(_flashlightBuffer);
+        if (_context != 0) _alc.DestroyContext((Context*)_context);
+        if (_device  != 0) _alc.CloseDevice((Device*)_device);
     }
 
 
@@ -171,17 +201,9 @@ public sealed class AmbientAudio : IDisposable
         return (format, sampleRate, data);
     }
 
-    public unsafe void Dispose()
+    public void Dispose()
     {
         if (!_isInitialized) return;
-
-        _al.SourceStop(_ambientSource);
-        _al.SourceStop(_flashlightSource);
-        _al.DeleteSource(_ambientSource);
-        _al.DeleteSource(_flashlightSource);
-        _al.DeleteBuffer(_ambientBuffer);
-        _al.DeleteBuffer(_flashlightBuffer);
-        _alc.DestroyContext((Context*)_context);
-        _alc.CloseDevice((Device*)_device);
+        FreeOpenALResources();
     }
 }

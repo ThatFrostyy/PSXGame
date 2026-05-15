@@ -26,6 +26,7 @@ public class Renderer : IDisposable
     private readonly ShaderProgram _upscaleShader;
 
     private readonly uint _batteryTexture;
+    private readonly uint _groundTexture;
     private readonly uint _whiteTex;
 
     // Full-screen quad for upscale pass
@@ -47,6 +48,7 @@ public class Renderer : IDisposable
         _upscaleShader = new ShaderProgram(gl, UpscaleVert, UpscaleFrag);
 
         _batteryTexture = LoadBatteryTexture();
+        _groundTexture = LoadGroundTexture();
         _whiteTex       = MakeWhiteTexture();
 
         CreateFbo();
@@ -177,6 +179,9 @@ public class Renderer : IDisposable
         _planeShader.SetVec3("uLightPos", lightPos);
         float flashlight = cam.FlashlightOn ? cam.FlashlightIntensity : 0f;
         _planeShader.SetFloat("uFlashlightOn", flashlight);
+        _planeShader.SetInt("uGroundTex", 0);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _groundTexture);
         _planeShader.SetVector2("uResolution", new Vector2D<float>(PsxW, PsxH));
         scene.PlaneMesh.Draw();
 
@@ -256,6 +261,7 @@ public class Renderer : IDisposable
         _gl.DeleteBuffer(_hudVbo);
         _gl.DeleteVertexArray(_hudVao);
         _gl.DeleteTexture(_batteryTexture);
+        _gl.DeleteTexture(_groundTexture);
         _gl.DeleteTexture(_whiteTex);
         _upscaleShader.Dispose();
         _batteryShader.Dispose();
@@ -280,6 +286,16 @@ public class Renderer : IDisposable
     {
         byte[] white = [255, 255, 255, 255];
         return UploadTexture(1, 1, white, repeat: false);
+    }
+
+    private uint LoadGroundTexture()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "src", "textures", "grass", "Grass_02-128x128.png");
+        if (!File.Exists(path))
+            path = Path.Combine(Directory.GetCurrentDirectory(), "src", "textures", "grass", "Grass_02-128x128.png");
+        using var fs = File.OpenRead(path);
+        var img = ImageResult.FromStream(fs, ColorComponents.RedGreenBlueAlpha);
+        return UploadTexture((uint)img.Width, (uint)img.Height, img.Data, repeat: true);
     }
 
     private uint UploadTexture(uint w, uint h, byte[] data, bool repeat)
@@ -325,14 +341,16 @@ public class Renderer : IDisposable
 "#version 330 core\n" +
 "in vec3 vColor; in vec2 vUV; in vec3 vWorldPos;\n" +
 "out vec4 fragColor;\n" +
+"uniform sampler2D uGroundTex;\n" +
 "uniform vec3 uCamPos, uLightPos, uCamDir;\n" +
 "uniform float uFlashlightOn;\n" +
 "uniform vec2 uResolution;\n" +
 "void main(){\n" +
 "    vec2 g=abs(fract(vUV-0.5)-0.5)/fwidth(vUV);\n" +
 "    float line=1.0-min(min(g.x,g.y),1.0);\n" +
-"    vec3 col=vColor+line*0.05;\n" +
-"    col*=vec3(0.26,0.30,0.36);\n" +
+"    vec3 tex=texture(uGroundTex,vUV).rgb;\n" +
+"    vec3 col=(tex*vec3(0.58,0.38,0.24))*vColor+line*0.04;\n" +
+"    col*=vec3(0.30,0.28,0.22);\n" +
 // flashlight: bright cone that multiplies existing colour
 "    vec3 toFrag=normalize(vWorldPos-uLightPos);\n" +
 "    float beam=pow(max(dot(toFrag,uCamDir),0.0),12.0)*uFlashlightOn;\n" +

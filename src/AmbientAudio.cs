@@ -14,6 +14,10 @@ public sealed class AmbientAudio : IDisposable
     private readonly uint _ambientSource;
     private readonly uint _flashlightBuffer;
     private readonly uint _flashlightSource;
+    private readonly uint _flickerBuffer;
+    private readonly uint _flickerSource;
+    private readonly uint[] _dirtFootstepBuffers = new uint[5];
+    private readonly uint _footstepSource;
     private readonly bool _isInitialized;
 
     public unsafe AmbientAudio()
@@ -42,6 +46,9 @@ public sealed class AmbientAudio : IDisposable
         _ambientSource = _al.GenSource();
         _flashlightBuffer = _al.GenBuffer();
         _flashlightSource = _al.GenSource();
+        _flickerBuffer = _al.GenBuffer();
+        _flickerSource = _al.GenSource();
+        _footstepSource = _al.GenSource();
 
         // Load assets BEFORE marking as initialized so that if LoadWav throws,
         // Dispose() (called by the catch block below) can safely clean up the
@@ -69,6 +76,29 @@ public sealed class AmbientAudio : IDisposable
             _al.SetSourceProperty(_flashlightSource, SourceBoolean.Looping, false);
             _al.SetSourceProperty(_flashlightSource, SourceFloat.Gain, 0.85f);
 
+            var flickerWav = LoadWav(ResolveSoundPath("flicker.wav"));
+            fixed (byte* p = flickerWav.Data)
+            {
+                _al.BufferData(_flickerBuffer, flickerWav.Format, p, flickerWav.Data.Length, flickerWav.SampleRate);
+            }
+
+            _al.SetSourceProperty(_flickerSource, SourceInteger.Buffer, (int)_flickerBuffer);
+            _al.SetSourceProperty(_flickerSource, SourceBoolean.Looping, true);
+            _al.SetSourceProperty(_flickerSource, SourceFloat.Gain, 0.25f);
+
+            for (int i = 0; i < _dirtFootstepBuffers.Length; i++)
+            {
+                _dirtFootstepBuffers[i] = _al.GenBuffer();
+                var footstepWav = LoadWav(ResolveSoundPath(Path.Combine("footsteps", "dirt", $"{i + 1}.wav")));
+                fixed (byte* p = footstepWav.Data)
+                {
+                    _al.BufferData(_dirtFootstepBuffers[i], footstepWav.Format, p, footstepWav.Data.Length, footstepWav.SampleRate);
+                }
+            }
+
+            _al.SetSourceProperty(_footstepSource, SourceBoolean.Looping, false);
+            _al.SetSourceProperty(_footstepSource, SourceFloat.Gain, 0.6f);
+
             // Only mark fully initialized once every resource is ready.
             _isInitialized = true;
         }
@@ -90,8 +120,13 @@ public sealed class AmbientAudio : IDisposable
     {
         if (_ambientSource  != 0) { _al.SourceStop(_ambientSource);   _al.DeleteSource(_ambientSource);   }
         if (_flashlightSource != 0) { _al.SourceStop(_flashlightSource); _al.DeleteSource(_flashlightSource); }
+        if (_flickerSource != 0) { _al.SourceStop(_flickerSource); _al.DeleteSource(_flickerSource); }
+        if (_footstepSource != 0) { _al.SourceStop(_footstepSource); _al.DeleteSource(_footstepSource); }
         if (_ambientBuffer  != 0) _al.DeleteBuffer(_ambientBuffer);
         if (_flashlightBuffer != 0) _al.DeleteBuffer(_flashlightBuffer);
+        if (_flickerBuffer != 0) _al.DeleteBuffer(_flickerBuffer);
+        foreach (var buffer in _dirtFootstepBuffers)
+            if (buffer != 0) _al.DeleteBuffer(buffer);
         if (_context != 0) _alc.DestroyContext((Context*)_context);
         if (_device  != 0) _alc.CloseDevice((Device*)_device);
     }
@@ -104,6 +139,26 @@ public sealed class AmbientAudio : IDisposable
         _al.SourceStop(_flashlightSource);
         _al.SetSourceProperty(_flashlightSource, SourceFloat.SecOffset, 0f);
         _al.SourcePlay(_flashlightSource);
+    }
+
+    public void SetFlashlightFlickerLoop(bool enabled)
+    {
+        if (!_isInitialized) return;
+        _al.GetSourceProperty(_flickerSource, GetSourceInteger.SourceState, out int state);
+        bool playing = (SourceState)state == SourceState.Playing;
+
+        if (enabled && !playing)
+            _al.SourcePlay(_flickerSource);
+        else if (!enabled && playing)
+            _al.SourceStop(_flickerSource);
+    }
+
+    public void PlayDirtFootstep(Random rng)
+    {
+        if (!_isInitialized || _dirtFootstepBuffers.Length == 0) return;
+        uint selectedBuffer = _dirtFootstepBuffers[rng.Next(_dirtFootstepBuffers.Length)];
+        _al.SetSourceProperty(_footstepSource, SourceInteger.Buffer, (int)selectedBuffer);
+        _al.SourcePlay(_footstepSource);
     }
 
     private static string ResolveSoundPath(string fileName)

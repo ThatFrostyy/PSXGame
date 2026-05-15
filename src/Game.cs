@@ -22,6 +22,7 @@ public class Game
     private Vector2D<float> _lastMousePos;
     private float _batterySeconds = BatteryLifeSeconds;
     private readonly Random _rng = new(42);
+    private float _footstepTimer;
 
     public void Run()
     {
@@ -120,6 +121,17 @@ public class Game
             moveRight *= invLen;
             _camera.MoveForward(moveForward * speed * dt);
             _camera.MoveRight(moveRight * speed * dt);
+
+            _footstepTimer -= dt;
+            if (_footstepTimer <= 0f)
+            {
+                _ambient?.PlayDirtFootstep(_rng);
+                _footstepTimer = 0.43f;
+            }
+        }
+        else
+        {
+            _footstepTimer = 0f;
         }
 
         if (_camera.FlashlightOn)
@@ -133,6 +145,7 @@ public class Game
 
         float batteryLevel = _batterySeconds / BatteryLifeSeconds;
         bool shouldFlicker = _camera.FlashlightOn && batteryLevel < 0.2f;
+        _ambient?.SetFlashlightFlickerLoop(shouldFlicker);
         bool flickerOff = shouldFlicker && _rng.NextSingle() < (0.12f + (0.2f - batteryLevel) * 1.8f);
         _camera.FlashlightIntensity = flickerOff ? 0f : 1f;
         _camera.BatteryLevel = batteryLevel;
